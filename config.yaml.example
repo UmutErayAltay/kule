@@ -1,0 +1,27 @@
+repo_roots:
+  - ~/Desktop
+  - ~/Documents
+
+cor:
+  base_url: "http://127.0.0.1:8787"
+
+borsasite:
+  health_url: "https://example.com/api/health"
+  database_url: ""  # opsiyonel, boşsa sadece HTTP health kullanılır
+
+readbunny:
+  database_url: "postgresql://user:password@db-host:5432/readbunny"
+
+vault:
+  path: "/path/to/vault"
+
+maintenance:                    # Dalga F — hepsi OPSİYONEL, eksikse default kullanılır
+  disk_threshold_percent: 90    # bu oranın üstünde dolu olan diskler uyarılır
+  stale_process_hours: 6       # bu süreden uzun çalışan süreçler "unutulmuş" sayılır
+  stale_git_days: 3             # kirli repoda bu günden eski değişiklik varsa uyarılır
+  process_names: [ollama, uvicorn, node]   # izlenecek süreç adı kalıpları
+  # disk_paths: []              # boşsa repo_roots, o da boşsa "/" kontrol edilir
+
+telegram:
+  bot_token: ""   # boş bırak, env'den de okunabilir: KULE_TELEGRAM_BOT_TOKEN
+  chat_id: ""     # KULE_TELEGRAM_CHAT_ID

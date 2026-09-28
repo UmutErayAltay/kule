@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kule"
+version = "0.1.0"
+description = "Umut'un projelerinin durumunu tek panelde toplayan kontrol kulesi"
+requires-python = ">=3.11"
+dependencies = [
+    # fastapi 0.116-0.139 `starlette<1.0` istiyordu; starlette 1.x'e
+    # (ör. sse-starlette/mcp) çıkan ortamlarda `FastAPI()` import'u
+    # `Router.__init__() got an unexpected keyword argument 'on_startup'`
+    # ile çöküyordu. 0.141+ her iki starlette kuşağıyla da çalışıyor.
+    "fastapi>=0.141.1",
+    # fastapi'nin kendi alt sınırı; ayrıca yazılır çünkü uyumsuz
+    # starlette sürümü yüzünden import'un çökmesi kule'yi tamamen
+    # ayakta tutmaz, starlette'ı sürümleyen kule'ye ait bir kısıttır.
+    "starlette>=0.46.0",
+    "uvicorn",
+    "pyyaml",
+    "psycopg[binary]",
+    "httpx",
+    "requests",
+    "psutil",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[project.scripts]
+kule = "app.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
