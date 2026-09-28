@@ -1,5 +1,11 @@
 # kule
 
+<!-- TODO: ekran görüntüsü eklenecek -->
+
+Türkçe · [English](README.en.md)
+
+## Açıklama
+
 Umut'un projelerinin durumunu tek panelde toplayan kontrol kulesi. Git
 repolarının durumu, cor (claude-openrouter) proxy sağlığı, BorsaSite
 pipeline'ının son çalışması, readbunny veritabanı durumu, Mt3Ui55OS
