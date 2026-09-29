@@ -1,6 +1,6 @@
 # kule
 
-<!-- TODO: ekran görüntüsü eklenecek -->
+![kule paneli](docs/screenshots/panel.png)
 
 Türkçe · [English](README.en.md)
 
