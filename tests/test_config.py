@@ -8,6 +8,7 @@ test edilebiliyor; varsayılan (path=None) davranışı test etmek için
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 import yaml
@@ -267,8 +268,9 @@ def test_durum_blocks_are_loaded_from_yaml(tmp_path):
     assert config["atlas"] == {"komut": ["atlas"], "zaman_asimi": 15}
     # string komut config'te string kalır; bölme işi collector'ın görevidir
     assert config["orkestra"]["komut"] == "orkestra durum"
-    # `~` genişletilir (diğer tüm yollar gibi)
-    assert config["harita"]["vault"].startswith("/")
+    # `~` genişletilir (diğer tüm yollar gibi). Mutlak yol olması gerekir —
+    # Windows'ta da (harf: "C:\\..."), o yüzden sabit "/" değil `is_absolute`.
+    assert Path(config["harita"]["vault"]).is_absolute()
     assert not config["harita"]["vault"].startswith("~")
 
 

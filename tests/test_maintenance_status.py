@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from app.collectors import maintenance_status
+from conftest import symlink_skip
 
 
 # ------------------------------------------------------------------ yardım
@@ -162,7 +163,10 @@ def test_disk_paths_config_wins_over_repo_roots(monkeypatch, tmp_path):
 
 
 def test_disk_falls_back_to_root_when_no_paths_configured(monkeypatch):
-    _patch_disk_usage(monkeypatch, {"/": (1000, 200, 800)})
+    # Anahtar, uygulamanın gerçekten çağırdığı yol: Windows'ta
+    # `str(Path("/")) == "\\"`, düz "/" eşleşmezdi ve "erişilemedi" sanırdı.
+    kok = str(Path(maintenance_status.FALLBACK_DISK_PATH))
+    _patch_disk_usage(monkeypatch, {kok: (1000, 200, 800)})
 
     result = maintenance_status._collect_disk({}, {})
 
@@ -172,6 +176,9 @@ def test_disk_falls_back_to_root_when_no_paths_configured(monkeypatch):
 
 def test_disk_unreadable_path_reports_error_without_raising(monkeypatch, tmp_path):
     _patch_disk_usage(monkeypatch, {})
+    # Kısaltma sınırı yükseltilir: aksi halde mesaj Windows'taki uzun tmp
+    # yolunda 80 karaktere kesilir ve "erişilemedi" bile kırpılır.
+    monkeypatch.setattr(maintenance_status, "MAX_ERROR_CHARS", 10_000)
 
     result = maintenance_status._collect_disk({"repo_roots": [str(tmp_path)]}, {})
 
@@ -180,11 +187,22 @@ def test_disk_unreadable_path_reports_error_without_raising(monkeypatch, tmp_pat
     assert result["full"] == []
 
 
-def test_disk_zero_total_is_not_divided(monkeypatch):
-    """total == 0 ise yüzde hesabı yapılmaz (ZeroDivisionError yerine error)."""
-    _patch_disk_usage(monkeypatch, {"/": (0, 0, 0)})
+def test_disk_error_is_truncated(monkeypatch, tmp_path):
+    """Kısaltma sınırı gerçekten uygulanır: uzun hata metni paneli/Telegram'ı
+    şişirmez. `test_notifier.py`deki `_clamp_message` testinin disk karşılığı."""
+    _patch_disk_usage(monkeypatch, {})
 
-    result = maintenance_status._collect_disk({"repo_roots": ["/"]}, {})
+    result = maintenance_status._collect_disk({"repo_roots": [str(tmp_path)]}, {})
+
+    assert len(result["error"]) <= maintenance_status.MAX_ERROR_CHARS
+
+
+def test_disk_zero_total_is_not_divided(monkeypatch, tmp_path):
+    """total == 0 ise yüzde hesabı yapılmaz (ZeroDivisionError yerine error)."""
+    _patch_disk_usage(monkeypatch, {str(tmp_path): (0, 0, 0)})
+    monkeypatch.setattr(maintenance_status, "MAX_ERROR_CHARS", 10_000)
+
+    result = maintenance_status._collect_disk({"repo_roots": [str(tmp_path)]}, {})
 
     assert "error" in result
     assert "sıfır" in result["error"]
@@ -330,6 +348,7 @@ def test_process_names_all_none_falls_back_to_default(monkeypatch):
     assert result["names"] == maintenance_status.DEFAULT_PROCESS_NAMES
 
 
+@symlink_skip
 def test_git_latest_mtime_does_not_follow_symlinks_out_of_repo(tmp_path):
     """GÜVENLİK: symlink takip edilirse tarama repo ağacı DIŞINA (ör. `/`)
     çıkabilir ve tüm diski tarar."""
@@ -350,6 +369,7 @@ def test_git_latest_mtime_does_not_follow_symlinks_out_of_repo(tmp_path):
     assert latest == pytest.approx(os.stat(repo / "src.txt").st_mtime, abs=1)
 
 
+@symlink_skip
 def test_git_latest_mtime_skips_symlinked_files(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
