@@ -60,7 +60,7 @@ MAINTENANCE_KEY = "maintenance"
 # yalnızca panelde sarı görünür: atlas taraması ve harita indeksi elle
 # yenilenir, vault'a ise her oturumda makine günlük yazar — bayatlık neredeyse
 # kalıcı bir durumdur ve her cron çalışmasında mesaj üretirdi.
-# `bayat_readme`, `kirik_link`, `yetim_not`, `kirli_repo` gibi SÜREKLİ >0
+# `bayat_readme`, `push_bekleyen`, `kirli_repo` gibi SÜREKLİ >0
 # olan sayaçlar da YALNIZCA panelde görünür — her koşuda 3 kırık link varsa
 # her 15 dakikada bir mesaj atmak bildirimi değersiz kılar. Aynı sebeple
 # `kanitsiz_ya_da_supheli` ve `kota.uyari_sayisi` de uyarı üretmez: bunlar

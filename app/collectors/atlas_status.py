@@ -5,10 +5,18 @@ atlas'ın kendi bulgu verisine (dosya, satır, eşleşen metin) kule hiç dokunm
 sayıları ister. Bulgunun kendisi, repo yolları ve commit başlıkları ne stdout'a
 gelirse gelsin buradan geçmez.
 
+Rol ayrımı (git kartıyla ÖRTÜŞME YOK): kule'nin `git` kartı ve
+`maintenance.stale_git` CANLI çalışma ağacını ölçer (kirli repo, tablo, en eski
+commitlenmemiş değişiklik). atlas ise `git status`'un gösteremediklerini
+taşır: pushlanmamış commit, README bayatlığı, sızıntı bulgusu, todo. atlas'ın
+`kirli_repo`/`repo_sayisi` alanları sözleşmede durur ama kule bunları OKUMAZ:
+taramanın yapıldığı andan kalmadır, farklı kök/derinlikle taranır ve aynı
+şeyi `git` kartıyla iki farklı sayı olarak gösterirdi.
+
 Panel/Telegram ayrımı: `veri_bayat` (atlas taraması eski, sayılar güvenilmez)
 panelde sarı görünür ama Telegram'a GİTMEZ: tarama elle yenilenir, bayatlık
 kalıcı bir durum olabilir ve her cron çalışmasında mesaj üretirdi.
-`bayat_readme`/`kirli_repo` gibi sürekli >0 sayaçlar da yalnızca panelde
+`bayat_readme`/`push_bekleyen` gibi sürekli >0 sayaçlar da yalnızca panelde
 görünür (bkz. `notifier.py`).
 
 Config bloğu tamamen opsiyoneldir: eksik/bozuk tipli olsa bile collector
@@ -22,11 +30,10 @@ from app.collectors import durum_status
 
 KAYNAK = "atlas"
 
-# Sözleşmede her zaman int>=0 olan sayılar. `son_tarama` bir zaman
+# Kule'nin okuduğu, sözleşmede her zaman int>=0 olan sayılar (`repo_sayisi` ve
+# `kirli_repo` bilerek yok, bkz. modül docstring'i). `son_tarama` bir zaman
 # damgasıdır, `veri_bayat` bool'dur — ikisi de aşağıda ayrı ele alınır.
 REQUIRED_COUNTS = [
-    "repo_sayisi",
-    "kirli_repo",
     "push_bekleyen",
     "push_bilinmeyen",
     "bayat_readme",

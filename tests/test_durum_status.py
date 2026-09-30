@@ -34,6 +34,15 @@ KAYNAKLAR = [
 ]
 
 
+def _ilk_zorunlu_sayi(collector_modul, gecerli) -> str:
+    """Fixture'daki, collector'ın GERÇEKTEN okuduğu ilk sayı alanı.
+
+    Fixture'da collector'ın okumadığı alanlar da bulunabilir (atlas'ın
+    `kirli_repo`/`repo_sayisi`'si gibi); onları bozmak/silmek bir şeyi test etmez.
+    """
+    return next(k for k in collector_modul.REQUIRED_COUNTS if k in gecerli)
+
+
 # ------------------------------------------------------------ geçerli çıktı
 
 
@@ -274,11 +283,7 @@ def test_zorunlu_sayi_alani_bozuksa_gecersiz(
 ):
     """Sayı alanları int>=0 olmalı. `True` int'in alt türü olduğu için
     YANLIŞLIKLA "1 sayılır" — o yüzden ayrıca reddedilir."""
-    ilk_sayi = next(
-        k
-        for k, v in gecerli.items()
-        if isinstance(v, int) and not isinstance(v, bool) and k != "surum"
-    )
+    ilk_sayi = _ilk_zorunlu_sayi(collector_modul, gecerli)
     payload = dict(gecerli)
     payload[ilk_sayi] = bozuk_sayi
 
@@ -290,11 +295,7 @@ def test_zorunlu_sayi_alani_bozuksa_gecersiz(
 @pytest.mark.parametrize("collector_modul, kaynak, gecerli", KAYNAKLAR)
 def test_zorunlu_sayi_alani_eksikse_gecersiz(collector_modul, kaynak, gecerli, tmp_path):
     payload = dict(gecerli)
-    ilk_sayi = next(
-        k
-        for k, v in gecerli.items()
-        if isinstance(v, int) and not isinstance(v, bool) and k != "surum"
-    )
+    ilk_sayi = _ilk_zorunlu_sayi(collector_modul, gecerli)
     del payload[ilk_sayi]
 
     result = collector_modul.collect({kaynak: {"komut": komut_cikti_veren(tmp_path, payload)}})
@@ -305,11 +306,7 @@ def test_zorunlu_sayi_alani_eksikse_gecersiz(collector_modul, kaynak, gecerli, t
 @pytest.mark.parametrize("collector_modul, kaynak, gecerli", KAYNAKLAR)
 def test_sifir_gecerli_bir_degerdir(collector_modul, kaynak, gecerli, tmp_path):
     """0 bir SAYIDIR, geçersiz değildir — sıfır "ölçtüm ve sıfır" demektir."""
-    ilk_sayi = next(
-        k
-        for k, v in gecerli.items()
-        if isinstance(v, int) and not isinstance(v, bool) and k != "surum"
-    )
+    ilk_sayi = _ilk_zorunlu_sayi(collector_modul, gecerli)
     payload = dict(gecerli)
     payload[ilk_sayi] = 0
 
@@ -651,3 +648,29 @@ def test_harita_bozuk_vault_argv_eklemez(tmp_path, bozuk_vault):
     assert result["reachable"] is True
     argv = json.loads(kayit.read_text(encoding="utf-8"))["argv"]
     assert argv == ["durum", "--json"]
+
+
+# ------------------------------------------- git kartıyla örtüşme yok (atlas)
+
+
+def test_atlas_kirli_repo_ve_repo_sayisi_kule_tarafindan_okunmaz(tmp_path):
+    """Kirli repo/repo sayısı canlı `git` kartının işi. atlas bunları sözleşmede
+    gönderse de kule OKUMAZ: taramanın yapıldığı andan kalmadır ve aynı şeyi iki
+    farklı sayıyla gösterirdi."""
+    result = atlas_status.collect({"atlas": {"komut": komut_cikti_veren(tmp_path, GECERLI_ATLAS)}})
+
+    assert result["reachable"] is True
+    assert "kirli_repo" not in result
+    assert "repo_sayisi" not in result
+    # atlas'ın `git status`'un gösteremediği alanları duruyor
+    for anahtar in ("push_bekleyen", "push_bilinmeyen", "bayat_readme", "bulgu_toplam", "todo_toplam"):
+        assert anahtar in result
+
+
+def test_atlas_kirli_repo_ve_repo_sayisi_olmadan_da_gecerlidir(tmp_path):
+    """Artık zorunlu değiller: atlas bunları bırakırsa kule bozulmaz."""
+    payload = {k: v for k, v in GECERLI_ATLAS.items() if k not in ("kirli_repo", "repo_sayisi")}
+
+    result = atlas_status.collect({"atlas": {"komut": komut_cikti_veren(tmp_path, payload)}})
+
+    assert result["reachable"] is True

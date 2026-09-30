@@ -212,8 +212,11 @@ DASHBOARD_JS = """
       }
     }
 
-    // atlas: veri BAYAT ise sayılar güvenilmezdir — bu yüzden kutuyu sarı
-    // değil kırmızıya çeviriyoruz (bir "eski" bilgi, sıfırdan kötüdür).
+    // atlas: `git status`'un gösteremediklerini gösterir (pushlanmamış commit,
+    // README bayatlığı, sızıntı bulgusu, todo). Kirli repo / repo sayısı BİLEREK
+    // yok: onlar canlı `git` kartının işi, atlas'ınki taramanın yapıldığı
+    // andan kalmadır ve aynı şeyi iki farklı sayıyla gösterirdi.
+    // Veri bayatsa kutu sarıdır (kırmızı değil: bayatlık kalıcı olabilir).
     var atlas = isPlainObject(data.atlas) ? data.atlas : {};
     if (atlas.reachable !== true) {
       setStatTile("stat-atlas", "ULAŞILAMIYOR", "bad", atlas.error ? String(atlas.error).slice(0, 48) : "");
@@ -224,7 +227,7 @@ DASHBOARD_JS = """
         atlas.veri_bayat === true ? "warn" : "ok",
         atlas.veri_bayat === true
           ? "veri bayat · " + fmtDate(atlas.son_tarama)
-          : (atlas.kirli_repo != null ? atlas.kirli_repo + " kirli / " + count(atlas.repo_sayisi) + " repo" : "")
+          : count(atlas.push_bekleyen) + " push bekleyen · " + count(atlas.bayat_readme) + " bayat README"
       );
     }
 
@@ -362,8 +365,6 @@ DASHBOARD_JS = """
     var reachable = atlas.reachable === true;
     setBadge(qs("atlas-badge"), reachable ? "ok" : "bad", reachable ? "okundu" : "erişilemiyor");
     setText("atlas-error", atlas.error ? String(atlas.error) : "");
-    setCountText("atlas-repo-sayisi", atlas.repo_sayisi);
-    setCountText("atlas-kirli-repo", atlas.kirli_repo);
     setCountText("atlas-push-bekleyen", atlas.push_bekleyen);
     setCountText("atlas-push-bilinmeyen", atlas.push_bilinmeyen);
     setCountText("atlas-bayat-readme", atlas.bayat_readme);

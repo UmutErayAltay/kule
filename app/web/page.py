@@ -15,8 +15,7 @@ anahtarı altında, hatalıysa `{"error": ...}` ile:
       "vault": {"broken_link_count", "orphan_note_count", "open_threads", "total_threads"} | {"error"},
       "maintenance": {"disk": {...}, "stale_processes": {...}, "stale_git": {...}},
       "atlas": {"reachable": true, "son_tarama": <iso|null>, "veri_bayat": <bool|null>,
-                "repo_sayisi": <int|null>, "kirli_repo": ..., "push_bekleyen": ...,
-                "push_bilinmeyen": ..., "bayat_readme": ..., "bulgu_toplam": ...,
+                "push_bekleyen": <int|null>, "push_bilinmeyen": ..., "bayat_readme": ..., "bulgu_toplam": ...,
                 "todo_toplam": ..., "bulgu_onem": {"<onem>": int} | null}
              | {"reachable": false, "error": "<sabit kod>"},
       "orkestra": {"reachable": true, "gorev_toplam": <int|null>, "onay_bekleyen": ...,
@@ -39,7 +38,7 @@ sakin bir "bulgu yok" durumunda kalır.
 (bakış: `app/collectors/durum_status.py`). Sayı alanları `int` DEĞİLSE
 `null` gelir — "bilinmiyor" 0 gibi gösterilmez, panelde "bilinmiyor"
 yazar. Erişilemeyen kaynak `{"reachable": false, "error": <sabit kod>}`.
-Bu sayaçların (`bayat_readme`, `kirli_repo`, `basarisiz`) panelde görünmesi
+Bu sayaçların (`bayat_readme`, `push_bekleyen`, `basarisiz`) panelde görünmesi
 Telegram'a GİTMESİ demek değildir: `notifier.py` yalnızca kaynağa
 erişilememesini ve `onay_bekleyen > 0` koşulunu uyarı sayar.
 
@@ -209,8 +208,6 @@ _HTML_MID = """</style>
         </div>
         <div class="stat-sub num-bad" id="atlas-error"></div>
         <dl class="kv-list">
-          <dt>toplam repo</dt><dd id="atlas-repo-sayisi">—</dd>
-          <dt>kirli repo</dt><dd id="atlas-kirli-repo">—</dd>
           <dt>push bekleyen</dt><dd id="atlas-push-bekleyen">—</dd>
           <dt>push bilinmeyen</dt><dd id="atlas-push-bilinmeyen">—</dd>
           <dt>bayat README</dt><dd id="atlas-bayat-readme">—</dd>

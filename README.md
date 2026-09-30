@@ -127,7 +127,7 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
     },
     "atlas": {
       "reachable": true, "son_tarama": "2026-09-30T08:00:00+00:00", "veri_bayat": false,
-      "repo_sayisi": 12, "kirli_repo": 3, "push_bekleyen": 2, "push_bilinmeyen": 1,
+      "push_bekleyen": 2, "push_bilinmeyen": 1,
       "bayat_readme": 4, "bulgu_toplam": 5, "bulgu_onem": {"guvenlik": 2}, "todo_toplam": 40
     },
     "orkestra": {
@@ -179,6 +179,15 @@ atlas durum --json
 orkestra durum --json
 ```
 
+> **Rol ayrımı: `git` kartı ile atlas örtüşmez.** `git` kartı ve
+> `maintenance.stale_git` **canlı çalışma ağacını** ölçer (kirli repo, repo
+> tablosu, en eski commitlenmemiş değişiklik). atlas ise `git status`'un
+> gösteremediklerini taşır: pushlanmamış commit, README bayatlığı, sızıntı
+> bulgusu, todo. atlas `kirli_repo`/`repo_sayisi` alanlarını sözleşmede
+> gönderir ama kule bunları **okumaz**: taramanın yapıldığı andan kalırlar,
+> farklı kök ve derinlikle taranırlar ve aynı şeyi iki farklı sayıyla
+> gösterirlerdi.
+
 > **harita** da aynı sözleşmeyi konuşur (`harita durum --json`,
 > `app/collectors/harita_status.py`) ama panelde **kartı yok**: kırık link ve
 > yetim not için `vault` kartı kullanılır. Yetim tanımı harita'nınkiyle
@@ -212,7 +221,7 @@ olmasın diye, yalnızca gerçek arıza/uyumsuzluk:
 
 | Kaynak | Telegram'a gider | Yalnızca panelde |
 |---|---|---|
-| atlas | (yalnızca erişilememe) | `veri_bayat` (sarı), `bayat_readme`, `kirli_repo`, `push_bekleyen` |
+| atlas | (yalnızca erişilememe) | `veri_bayat` (sarı), `bayat_readme`, `push_bekleyen` |
 | orkestra | `onay_bekleyen > 0` | `basarisiz` (birikir, iptal edilene dek düşmez), `kanitsiz_ya_da_supheli`, `kota.uyari_sayisi` |
 
 Sağ sütundakiler sürekli `> 0` olan inceleme sayaçlarıdır; her koşuda

@@ -300,8 +300,6 @@ DURUM_DOM_IDS = [
     "atlas-badge",
     "atlas-error",
     "atlas-bulgu-onem-kv",
-    "atlas-repo-sayisi",
-    "atlas-kirli-repo",
     "atlas-push-bekleyen",
     "atlas-push-bilinmeyen",
     "atlas-bayat-readme",

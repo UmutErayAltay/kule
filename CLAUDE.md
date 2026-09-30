@@ -48,7 +48,7 @@ app/
     vault_status.py     # Mt3Ui55OS vault'unu okur: kırık wikilink, GERÇEK yetim (ne alan ne veren; kök .md ve daily/ hariç), açık Threads.md hikaye sayısı
     maintenance_status.py # Dalga F: disk doluluğu + unutulmuş süreçler + eski kirli repo (SADECE raporlar)
     durum_status.py     # `durum --json` sözleşmesinin ORTAK koşucusu (subprocess + çıktı doğrulama)
-    atlas_status.py     # `atlas durum --json` -> repo/bulgu/todo sayıları
+    atlas_status.py     # `atlas durum --json` -> pushlanmamış/README/bulgu/todo sayıları (kirli repo/repo sayısı OKUNMAZ: canlı `git` kartıyla örtüşürdü)
     orkestra_status.py  # `orkestra durum --json` -> görev/onay/kota sayıları
     harita_status.py    # `harita durum --json` — modül duruyor ama aggregator'a KAYITLI DEĞİL (panelde kartı yok, vault kartı yeterli)
   main.py              # FastAPI app — GET / (panel HTML), GET /api/summary (aggregator JSON)
