@@ -43,6 +43,30 @@ NON_SOURCE_KEYS = {"collected_at"}
 # girmez, `hidden` sayımına katılmaz); her bulgu kendi satırında listelenir.
 MAINTENANCE_KEY = "maintenance"
 
+# `durum --json` sözleşmesini konuşan üç kaynak (atlas/orkestra/harita).
+# Bunlar erişilemez olduklarında `{"reachable": False, "error": <sabit kod>}`
+# döndüğü için `_describe`'ın VAR OLAN "dict + reachable" dalı zaten onları
+# doğru tanır — erişilememe cümlesi ek bir yol istemez. Ancak sayı alanları
+# `reachable: True` iken de sorun bildirebilir; o dal aşağıda.
+#
+# SÖZLEŞME KURALI (sözleşme.md, "kule tarafı"): uyarı koşulları SPAM
+# OLMAMASI İÇİN DAR TUTULUR. Yalnızca gerçek arıza/uyumsuzluk bildirilir:
+#   - orkestra: onay_bekleyen > 0 (bir insanın kararı bekleniyor; karar
+#               verilince kendiliğinden sıfırlanır). `basarisiz` DEĞİL:
+#               biriken bir sayaç, eski tek görev sonsuza dek spam üretir.
+#   - üçü de: kaynağa ERİŞİLEMEMESİ (yapılandırılmamışsa `config_yok` hariç:
+#               opsiyonel kaynak, izlenmiyor demektir).
+# `veri_bayat` (atlas) ve `indeks_bayat` (harita) BİLEREK Telegram'a gitmez,
+# yalnızca panelde sarı görünür: atlas taraması ve harita indeksi elle
+# yenilenir, vault'a ise her oturumda makine günlük yazar — bayatlık neredeyse
+# kalıcı bir durumdur ve her cron çalışmasında mesaj üretirdi.
+# `bayat_readme`, `kirik_link`, `yetim_not`, `kirli_repo` gibi SÜREKLİ >0
+# olan sayaçlar da YALNIZCA panelde görünür — her koşuda 3 kırık link varsa
+# her 15 dakikada bir mesaj atmak bildirimi değersiz kılar. Aynı sebeple
+# `kanitsiz_ya_da_supheli` ve `kota.uyari_sayisi` de uyarı üretmez: bunlar
+# inceleme bulgusudur, arıza değil.
+DURUM_SOURCES = ("atlas", "orkestra", "harita")
+
 
 def _truncate(value: Any) -> str:
     text = str(value).replace("\n", " ").strip()
@@ -62,9 +86,14 @@ def _describe(name: str, value: Any) -> str | None:
     """Tek bir kaynağın durumundan bir cümle kurar; sorun yoksa None.
 
     Kaynakların gerçek dönüş şekilleri üç çeşit (bkz. app/collectors/*.py):
-      - dict + `reachable` (cor, borsasite, readbunny)
+      - dict + `reachable` (cor, borsasite, readbunny, atlas/orkestra/harita)
       - dict + yalnızca `error` (vault — `reachable` alanı YOK)
       - dict listesi (git — hata repo başına, listenin kendisinde değil)
+
+    `atlas`/`orkestra`/`harita` erişilemezlikte bu üç şeklin birincisine
+    uyar (`{"reachable": False, "error": <sabit kod>}`), ama `reachable:
+    True` iken sayı alanlarından DAR uyarı koşulları üretirler — o yol
+    `_durum_sentences`'tedir (aşağıda).
 
     `maintenance` bu üç şeklin hiçbirine uymaz (disk/süreç/git alt
     bölümlerinden oluşur) ve burada değil, `_maintenance_sentences`
@@ -151,6 +180,57 @@ def _maintenance_sentences(value: Any) -> list[str]:
     return sentences
 
 
+def _durum_sentences(name: str, value: Any) -> list[str]:
+    """`durum --json` kaynaklarının DAR uyarı koşullarını cümleye çevirir.
+
+    `_describe` yalnızca ERİŞİLEMEZLİĞİ yakalar (`reachable: False` veya
+    `error`); bu kaynaklar `reachable: True` olurken de sorun bildirebilir
+    (bayat veri, tıkanan akış). O yüzden sayı alanları burada, ayrı bir
+    yolda kontrol edilir.
+
+    Mesajlarda YALNIZCA SAYI ve kısa etiket vardır — kaynağın hata metni,
+    komut yolu ya da alt sürecin stderr'i zaten collector'da sabit kodlara
+    indirgenmişti, buraya da sızmaz.
+
+    Tek koşul: orkestra `onay_bekleyen > 0` (`basarisiz`, atlas `veri_bayat`
+    ve harita `indeks_bayat` uyarı ÜRETMEZ; gerekçe modül başındaki not).
+
+    `null` alanlar SAYILMAZ: bilinmeyen bir sayı "sıfır" da "sorun var" da
+    demek değildir.
+    """
+    if not isinstance(value, dict) or value.get("reachable") is not True:
+        return []
+
+    sentences: list[str] = []
+    if name == "orkestra":
+        # `basarisiz` BİLEREK yok: son koşusu başarısız olan görev sayısı
+        # birikir ve bir insan iptal etmedikçe hiç düşmez; koşul olsaydı tek
+        # bir eski görev her cron çalışmasında sonsuza dek mesaj üretirdi.
+        # `onay_bekleyen` ise insan karar verince kendiliğinden sıfırlanır.
+        onay = value.get("onay_bekleyen")
+        if _is_positive_int(onay):
+            sentences.append(f"orkestra onay bekleyen görev: {onay}")
+    return sentences
+
+
+def _yapilandirilmamis(value: Any) -> bool:
+    """Opsiyonel durum kaynağı hiç yapılandırılmamış mı (`config_yok`)?
+
+    Böyle bir kaynak "erişilemiyor" değil "izlenmiyor"dur; Telegram'a
+    her cron çalışmasında "atlas erişilemiyor (config_yok)" gitmemeli.
+    """
+    return (
+        isinstance(value, dict)
+        and value.get("reachable") is False
+        and value.get("error") == "config_yok"
+    )
+
+
+def _is_positive_int(value: Any) -> bool:
+    """`int` ve `> 0` mi? `bool` reddedilir (int'in alt türü)."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def _clamp_message(message: str) -> str:
     """Mesajı Telegram'ın 4096 karakterlik tavanının altına keser.
 
@@ -180,6 +260,7 @@ def build_alert_message(summary: dict) -> str | None:
     """
     problems: list[str] = []
     maintenance_lines: list[str] = []
+    durum_lines: list[str] = []
     for name, value in summary.items():
         if name in NON_SOURCE_KEYS:
             continue
@@ -189,11 +270,21 @@ def build_alert_message(summary: dict) -> str | None:
             # tanımaz, ayrı yol gerekir.
             maintenance_lines.extend(_maintenance_sentences(value))
             continue
+        if name in DURUM_SOURCES:
+            # erişilememe cümlesi `_describe`'ın mevcut dalından gelir
+            # (`reachable: False`); sayı alanlarındaki uyarılar ise
+            # `_durum_sentences`'ten. İkisi birbirinin yerine geçmez.
+            if not _yapilandirilmamis(value):
+                sentence = _describe(name, value)
+                if sentence:
+                    problems.append(sentence)
+            durum_lines.extend(_durum_sentences(name, value))
+            continue
         sentence = _describe(name, value)
         if sentence:
             problems.append(sentence)
 
-    if not problems and not maintenance_lines:
+    if not problems and not maintenance_lines and not durum_lines:
         return None
 
     if problems:
@@ -205,6 +296,7 @@ def build_alert_message(summary: dict) -> str | None:
     else:
         header = "⚠️ kule uyarısı"
     lines = [header]
+    lines.extend(durum_lines)
     lines.extend(maintenance_lines)
 
     stamp = _format_collected_at(summary.get("collected_at"))

@@ -22,6 +22,33 @@ maintenance:                    # Dalga F — hepsi OPSİYONEL, eksikse default 
   process_names: [ollama, uvicorn, node]   # izlenecek süreç adı kalıpları
   # disk_paths: []              # boşsa repo_roots, o da boşsa "/" kontrol edilir
 
+# --- durum --json kaynakları (atlas / orkestra / harita) ---
+#
+# Üç blok da TAMAMEN OPSİYONEL: eksik ya da bozuk tipli olsa bile panel
+# düşmez, o kaynağın kartı sabit bir hata koduyla "erişilemiyor" der.
+# Kule bu araçları alt süreç olarak çağırır (`<komut> durum --json`),
+# ağa çıkmaz, hiçbir şeyi değiştirmez — yalnızca SAYILARI okur.
+#
+# `komut` string ya da liste olabilir; liste tavsiye edilir (tırnaklama
+# tuzağı yok). Yol bulunamazsa/süreç zaman aşımına uğrarsa ya da hata
+# döndürürse sabit kod: komut_yok / zaman_asimi / bilinmeyen_hata.
+# `zaman_asimi` saniye cinsindendir, bozuk/sıfır/negatifse 15sn kullanılır.
+#
+# Alt sürece kule'nin Telegram secret'ı (KULE_TELEGRAM_*) GEÇİRİLMEZ.
+
+atlas:
+  komut: ["atlas"]             # atlas kendi CLI'sini sunar
+  zaman_asimi: 15
+
+orkestra:
+  komut: ["orkestra"]
+  zaman_asimi: 15
+
+harita:
+  komut: ["harita"]
+  # vault: "~/Mt3Ui55OS"      # OPSİYONEL — verilmezse harita kendi
+                               # varsayılan çözümlemesini kullanır
+
 telegram:
   bot_token: ""   # boş bırak, env'den de okunabilir: KULE_TELEGRAM_BOT_TOKEN
   chat_id: ""     # KULE_TELEGRAM_CHAT_ID

@@ -3,12 +3,17 @@
 Sayfa yüklenince ve her 30 saniyede bir `/api/summary`'yi çeker; şekli
 `app/aggregator.py::collect_all`'ın döndürdüğü dict ile birebir aynı
 varsayılır: {git: [...], cor: {...}, borsasite: {...}, readbunny: {...},
-vault: {...}, maintenance: {...}, collected_at: <epoch saniye>}. Her
+vault: {...}, maintenance: {...}, atlas: {...}, orkestra: {...},
+harita: {...}, collected_at: <epoch saniye>}. Her
 collector kendi `{"error": ...}` ile izole düştüğü için burada da her
 okuma "alan yoksa/obje değilse boş göster" ilkesiyle savunmalı yazılıyor
 — backend'in tam şeklini bilmeden (henüz ayrı bir ajan yazıyor) kırılgan
 olmamak için. `maintenance` alt bölümleri de aynı izolasyonu taşır:
 biri düşse bile diğer iki listenin verisi ekranda kalır.
+
+`atlas`/`orkestra`/`harita` sayı alanlarında `null` = BİLİNMİYOR'dur ve
+`count()` ile "bilinmiyor" yazılır — `|| 0` gibi bir kısayol sessizce sıfır
+uydurur ve sözleşmenin "0 DEĞİL" kuralını panelde ihlal ederdi.
 
 fetch başarısız olursa (`.catch`) son bilinen veri DOM'da kalır, sadece
 sessiz bir "bağlantı koptu" rozeti görünür hale gelir — hiçbir alan
@@ -206,6 +211,57 @@ DASHBOARD_JS = """
         );
       }
     }
+
+    // atlas: veri BAYAT ise sayılar güvenilmezdir — bu yüzden kutuyu sarı
+    // değil kırmızıya çeviriyoruz (bir "eski" bilgi, sıfırdan kötüdür).
+    var atlas = isPlainObject(data.atlas) ? data.atlas : {};
+    if (atlas.reachable !== true) {
+      setStatTile("stat-atlas", "ULAŞILAMIYOR", "bad", atlas.error ? String(atlas.error).slice(0, 48) : "");
+    } else {
+      setStatTile(
+        "stat-atlas",
+        count(atlas.bulgu_toplam),
+        atlas.veri_bayat === true ? "warn" : "ok",
+        atlas.veri_bayat === true
+          ? "veri bayat · " + fmtDate(atlas.son_tarama)
+          : (atlas.kirli_repo != null ? atlas.kirli_repo + " kirli / " + count(atlas.repo_sayisi) + " repo" : "")
+      );
+    }
+
+    // orkestra: onay bekleyen görev bir insanın işi beklediği anlamına gelir
+    // — dikkat, ama arıza değil; başarısız görev ise akışta çökmedir.
+    var ork = isPlainObject(data.orkestra) ? data.orkestra : {};
+    if (ork.reachable !== true) {
+      setStatTile("stat-orkestra", "ULAŞILAMIYOR", "bad", ork.error ? String(ork.error).slice(0, 48) : "");
+    } else {
+      var bekleyen = ork.onay_bekleyen;
+      var basarisiz = ork.basarisiz;
+      // `basarisiz` birikir (iptal edilmedikçe düşmez): renge/üst çubuğa
+      // girerse bir eski görev paneli sonsuza dek kırmızı tutar. Sayı
+      // altyazıda görünür, ciddiyet yalnızca onay bekleyenden gelir.
+      var orkKind = (typeof bekleyen === "number" && bekleyen > 0) ? "warn" : "ok";
+      setStatTile(
+        "stat-orkestra",
+        count(bekleyen),
+        orkKind,
+        count(ork.gorev_toplam) + " görev" + (ork.basarisiz != null ? " · " + count(ork.basarisiz) + " başarısız" : "")
+      );
+    }
+
+    // harita: indeks bayatsa kırık link/şüpheli not sayıları güvenilmezdir.
+    var harita = isPlainObject(data.harita) ? data.harita : {};
+    if (harita.reachable !== true) {
+      setStatTile("stat-harita", "ULAŞILAMIYOR", "bad", harita.error ? String(harita.error).slice(0, 48) : "");
+    } else {
+      setStatTile(
+        "stat-harita",
+        count(harita.kirik_link),
+        harita.indeks_bayat === true ? "warn" : "ok",
+        harita.indeks_bayat === true
+          ? "indeks bayat · " + fmtDate(harita.son_indeks)
+          : count(harita.yetim_not) + " yetim not"
+      );
+    }
   }
 
   function renderRepoTable(git) {
@@ -289,6 +345,72 @@ DASHBOARD_JS = """
 
   function num(value) {
     return typeof value === "number" && !isNaN(value) ? String(value) : "—";
+  }
+
+  // ---- durum --json kaynakları (atlas / orkestra / harita) -------------
+  //
+  // Sözleşme "bilinmeyen için null (0 DEĞİL)" diyor. Backend de int olmayan
+  // sayıyı null'a çeviriyor, ama arada bir yerde `|| 0` yazmak sessizce
+  // "ölçtüm, sıfır" anlamına gelen bir sayı uydurur — panelde de
+  // notifier'da da yanlış bir güvence izlenimi yaratırdı. Bu yüzden
+  // `count()` null'ı AYRI bir metne çevirir, `|| 0` hiçbir yerde kullanılmaz.
+
+  var UNKNOWN = "bilinmiyor";
+
+  function count(value) {
+    // backend int>=0 ya da null döner; null (ve JSON'daki true/false/"3"
+    // gibi kayıp değerler) "bilinmiyor" olur, 0 DEĞİL.
+    return typeof value === "number" && isFinite(value) ? String(value) : UNKNOWN;
+  }
+
+  // Not: `atlas`'ın `bulgu_onem`/`orkestra`'nın `gorev_durum` haritaları
+  // KISA SABİT ETİKET -> sayı sözlüğüdür (kaynak enum'ları). Panelde
+  // key/value listesi olarak basılır; `renderKv` zaten yalnızca düz
+  // nesneleri kabul eder, diziyi JSON string'i olarak basardı.
+
+  function setCountText(id, value) {
+    setText(id, count(value));
+  }
+
+  function renderAtlas(atlas) {
+    atlas = isPlainObject(atlas) ? atlas : {};
+    var reachable = atlas.reachable === true;
+    setBadge(qs("atlas-badge"), reachable ? "ok" : "bad", reachable ? "okundu" : "erişilemiyor");
+    setText("atlas-error", atlas.error ? String(atlas.error) : "");
+    setCountText("atlas-repo-sayisi", atlas.repo_sayisi);
+    setCountText("atlas-kirli-repo", atlas.kirli_repo);
+    setCountText("atlas-push-bekleyen", atlas.push_bekleyen);
+    setCountText("atlas-push-bilinmeyen", atlas.push_bilinmeyen);
+    setCountText("atlas-bayat-readme", atlas.bayat_readme);
+    setCountText("atlas-bulgu-toplam", atlas.bulgu_toplam);
+    setCountText("atlas-todo-toplam", atlas.todo_toplam);
+    setText("atlas-son-tarama", atlas.son_tarama ? fmtDate(atlas.son_tarama) : UNKNOWN);
+    renderKv(qs("atlas-bulgu-onem-kv"), atlas.bulgu_onem);
+  }
+
+  function renderOrkestra(orkestra) {
+    orkestra = isPlainObject(orkestra) ? orkestra : {};
+    var reachable = orkestra.reachable === true;
+    setBadge(qs("orkestra-badge"), reachable ? "ok" : "bad", reachable ? "okundu" : "erişilemiyor");
+    setText("orkestra-error", orkestra.error ? String(orkestra.error) : "");
+    setCountText("orkestra-gorev-toplam", orkestra.gorev_toplam);
+    setCountText("orkestra-onay-bekleyen", orkestra.onay_bekleyen);
+    setCountText("orkestra-basarisiz", orkestra.basarisiz);
+    setCountText("orkestra-kanitsiz", orkestra.kanitsiz_ya_da_supheli);
+    renderKv(qs("orkestra-gorev-durum-kv"), orkestra.gorev_durum);
+    renderKv(qs("orkestra-kota-kv"), orkestra.kota);
+  }
+
+  function renderHarita(harita) {
+    harita = isPlainObject(harita) ? harita : {};
+    var reachable = harita.reachable === true;
+    setBadge(qs("harita-badge"), reachable ? "ok" : "bad", reachable ? "okundu" : "erişilemiyor");
+    setText("harita-error", harita.error ? String(harita.error) : "");
+    setCountText("harita-not-sayisi", harita.not_sayisi);
+    setCountText("harita-kirik-link", harita.kirik_link);
+    setCountText("harita-yetim-not", harita.yetim_not);
+    setCountText("harita-tutarlilik-uyari", harita.tutarlilik_uyari);
+    setText("harita-son-indeks", harita.son_indeks ? fmtDate(harita.son_indeks) : UNKNOWN);
   }
 
   function renderCor(cor) {
@@ -479,10 +601,25 @@ DASHBOARD_JS = """
     var maintenanceFailed = !maintenanceKnown(mt) || maintenanceErrors(mt).length > 0;
     var maintenanceFindingsCount = maintenanceFindings(mt);
 
+    // durum --json kaynakları: notifier'ın DAR koşullarıyla AYNI ciddiyet.
+    // Panel "dikkat" derken Telegram susuyorsa (ya da tersi) iki yüz birbirini
+    // düzeltmiyormuş gibi görünür — o yüzden eşikler burada da birebir aynı:
+    // erişilememe = sorun; veri/indeks bayatı ve onay bekleyen = dikkat. Sürekli >0 olan `bayat_readme`/`kırık link`
+    // sayıları kasıtlı olarak topbar'ı etkilemez (spam olmasın diye).
+    var atlas = isPlainObject(data.atlas) ? data.atlas : {};
+    var ork = isPlainObject(data.orkestra) ? data.orkestra : {};
+    var harita = isPlainObject(data.harita) ? data.harita : {};
+    var durumBroken =
+      atlas.reachable !== true || ork.reachable !== true || harita.reachable !== true;
+    var durumBad =
+      durumBroken;
+    var durumWarn = (ork.onay_bekleyen || 0) > 0 || harita.indeks_bayat === true
+      || atlas.veri_bayat === true;
+
     var level = "ok";
-    if (anyRepoError || !cor.reachable || !bs.reachable || !rb.reachable || vault.error || maintenanceFailed) {
+    if (anyRepoError || !cor.reachable || !bs.reachable || !rb.reachable || vault.error || maintenanceFailed || durumBad) {
       level = "bad";
-    } else if (anyDirty || (rb.error_count || 0) > 0 || maintenanceFindingsCount > 0) {
+    } else if (anyDirty || (rb.error_count || 0) > 0 || maintenanceFindingsCount > 0 || durumWarn) {
       level = "warn";
     }
 
@@ -504,6 +641,9 @@ DASHBOARD_JS = """
     renderBorsasite(data.borsasite);
     renderReadbunny(data.readbunny);
     renderVault(data.vault);
+    renderAtlas(data.atlas);
+    renderOrkestra(data.orkestra);
+    renderHarita(data.harita);
     renderMaintenance(data.maintenance);
     renderOverallStatus(data);
     var updatedEl = qs("updated-at");

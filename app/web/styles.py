@@ -145,9 +145,10 @@ section.block {
 
 /* ---- stat grid ---- */
 
-/* Altı kaynak (bakım eklendi) tek sıraya sığmıyor: 6 kolonda "ULAŞILAMIYOR"
-   gibi uzun bir değer 24px mono ile taşıyordu. Geniş ekranda 3 kolon (iki
-   satır) — her kutunun genişliği korunur, tipografi değişmez. */
+/* Dokuz kaynak (atlas/orkestra/harita eklendi) tek sıraya sığmıyor: 6
+   kolonda "ULAŞILAMIYOR" gibi uzun bir değer 24px mono ile taşıyordu.
+   Geniş ekranda 3 kolon (üç satır) — her kutunun genişliği korunur,
+   tipografi değişmez. */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

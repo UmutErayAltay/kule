@@ -14,6 +14,21 @@ anahtarı altında, hatalıysa `{"error": ...}` ile:
       "readbunny": {"reachable", "last_updated", "error_count", "pending_count", "total_count"} | {"reachable": false, "error"},
       "vault": {"broken_link_count", "orphan_note_count", "open_threads", "total_threads"} | {"error"},
       "maintenance": {"disk": {...}, "stale_processes": {...}, "stale_git": {...}},
+      "atlas": {"reachable": true, "son_tarama": <iso|null>, "veri_bayat": <bool|null>,
+                "repo_sayisi": <int|null>, "kirli_repo": ..., "push_bekleyen": ...,
+                "push_bilinmeyen": ..., "bayat_readme": ..., "bulgu_toplam": ...,
+                "todo_toplam": ..., "bulgu_onem": {"<onem>": int} | null}
+             | {"reachable": false, "error": "<sabit kod>"},
+      "orkestra": {"reachable": true, "gorev_toplam": <int|null>, "onay_bekleyen": ...,
+                   "basarisiz": ..., "kanitsiz_ya_da_supheli": ...,
+                   "gorev_durum": {"<durum>": int} | null,
+                   "kota": {"gun": <iso gun|null>, "toplam_istek": int, "uyari_sayisi": int,
+                            "veri_var": <bool|null>} | null}
+              | {"reachable": false, "error": "<sabit kod>"},
+      "harita": {"reachable": true, "son_indeks": <iso|null>, "indeks_bayat": <bool|null>,
+                 "not_sayisi": <int|null>, "kirik_link": ..., "yetim_not": ...,
+                 "tutarlilik_uyari": <int|null>}
+              | {"reachable": false, "error": "<sabit kod>"},
       "collected_at": <epoch saniye>
     }
 
@@ -23,6 +38,14 @@ listesidir (dalga F) — panelde de öyle gösterilir: alt bölümlerin
 `disk.full` / `stale_processes.items` / `stale_git.items` listeleri
 kendi başlıkları altında satır satır basılır, hiçbiri boş değilse
 sakin bir "bulgu yok" durumunda kalır.
+
+`atlas`/`orkestra`/`harita` `durum --json` sözleşmesinden gelen sayılardır
+(bakış: `app/collectors/durum_status.py`). Sayı alanları `int` DEĞİLSE
+`null` gelir — "bilinmiyor" 0 gibi gösterilmez, panelde "bilinmiyor"
+yazar. Erişilemeyen kaynak `{"reachable": false, "error": <sabit kod>}`.
+Bu üç sayacın (`bayat_readme`, `kırık link`, `yetim not`) panelde görünmesi
+Telegram'a GİTMESİ demek değildir: `notifier.py` yalnızca kaynağa
+erişilememesini ve `onay_bekleyen > 0` koşulunu uyarı sayar.
 
 DOM kimlikleri (id) `DASHBOARD_JS` ile birebir eşleşir — biri değişirse
 diğeri de değişmeli, aksi halde sayfa sessizce boş kalır (JS elementi
@@ -89,6 +112,21 @@ _HTML_MID = """</style>
       <div class="stat-label">bakım bulgusu</div>
       <div class="stat-value" id="stat-maintenance-value">—</div>
       <div class="stat-sub" id="stat-maintenance-sub"></div>
+    </div>
+    <div class="stat-tile" id="stat-atlas-tile">
+      <div class="stat-label">atlas bulgu</div>
+      <div class="stat-value" id="stat-atlas-value">—</div>
+      <div class="stat-sub" id="stat-atlas-sub"></div>
+    </div>
+    <div class="stat-tile" id="stat-orkestra-tile">
+      <div class="stat-label">orkestra onay bekleyen</div>
+      <div class="stat-value" id="stat-orkestra-value">—</div>
+      <div class="stat-sub" id="stat-orkestra-sub"></div>
+    </div>
+    <div class="stat-tile" id="stat-harita-tile">
+      <div class="stat-label">harita kırık link</div>
+      <div class="stat-value" id="stat-harita-value">—</div>
+      <div class="stat-sub" id="stat-harita-sub"></div>
     </div>
   </div>
 </section>
@@ -168,6 +206,65 @@ _HTML_MID = """</style>
           <dt>yetim not</dt><dd id="vault-orphan">—</dd>
           <dt>açık hikâye</dt><dd id="vault-open-threads">—</dd>
           <dt>toplam hikâye</dt><dd id="vault-total-threads">—</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div>
+      <p class="eyebrow">atlas</p>
+      <div class="card">
+        <div class="card-head">
+          <span class="badge badge-neutral" id="atlas-badge">bekliyor</span>
+        </div>
+        <div class="stat-sub num-bad" id="atlas-error"></div>
+        <dl class="kv-list">
+          <dt>toplam repo</dt><dd id="atlas-repo-sayisi">—</dd>
+          <dt>kirli repo</dt><dd id="atlas-kirli-repo">—</dd>
+          <dt>push bekleyen</dt><dd id="atlas-push-bekleyen">—</dd>
+          <dt>push bilinmeyen</dt><dd id="atlas-push-bilinmeyen">—</dd>
+          <dt>bayat README</dt><dd id="atlas-bayat-readme">—</dd>
+          <dt>toplam bulgu</dt><dd id="atlas-bulgu-toplam">—</dd>
+          <dt>toplam todo</dt><dd id="atlas-todo-toplam">—</dd>
+          <dt>son tarama</dt><dd id="atlas-son-tarama">—</dd>
+        </dl>
+        <p class="eyebrow" style="margin-top:10px;">bulgu (önem)</p>
+        <dl class="kv-list" id="atlas-bulgu-onem-kv"><div class="empty-row">yükleniyor…</div></dl>
+      </div>
+    </div>
+
+    <div>
+      <p class="eyebrow">orkestra</p>
+      <div class="card">
+        <div class="card-head">
+          <span class="badge badge-neutral" id="orkestra-badge">bekliyor</span>
+        </div>
+        <div class="stat-sub num-bad" id="orkestra-error"></div>
+        <dl class="kv-list">
+          <dt>toplam görev</dt><dd id="orkestra-gorev-toplam">—</dd>
+          <dt>onay bekleyen</dt><dd id="orkestra-onay-bekleyen">—</dd>
+          <dt>başarısız</dt><dd id="orkestra-basarisiz">—</dd>
+          <dt>kanıtsız/şüpheli</dt><dd id="orkestra-kanitsiz">—</dd>
+        </dl>
+        <p class="eyebrow" style="margin-top:10px;">görev (durum)</p>
+        <dl class="kv-list" id="orkestra-gorev-durum-kv"><div class="empty-row">yükleniyor…</div></dl>
+        <p class="eyebrow" style="margin-top:10px;">kota</p>
+        <dl class="kv-list" id="orkestra-kota-kv"><div class="empty-row">yükleniyor…</div></dl>
+      </div>
+    </div>
+
+    <div class="card-wide">
+      <p class="eyebrow">harita (vault)</p>
+      <div class="card">
+        <div class="card-head">
+          <span class="badge badge-neutral" id="harita-badge">bekliyor</span>
+        </div>
+        <div class="stat-sub num-bad" id="harita-error"></div>
+        <dl class="kv-list">
+          <dt>toplam not</dt><dd id="harita-not-sayisi">—</dd>
+          <dt>kırık link</dt><dd id="harita-kirik-link">—</dd>
+          <dt>yetim not</dt><dd id="harita-yetim-not">—</dd>
+          <dt>tutarlılık uyarısı</dt><dd id="harita-tutarlilik-uyari">—</dd>
+          <dt>son indeks</dt><dd id="harita-son-indeks">—</dd>
         </dl>
       </div>
     </div>

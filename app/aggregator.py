@@ -20,10 +20,13 @@ from threading import Lock
 from typing import Any, Callable
 
 from app.collectors import (
+    atlas_status,
     borsasite_status,
     cor_status,
     git_status,
+    harita_status,
     maintenance_status,
+    orkestra_status,
     readbunny_status,
     vault_status,
 )
@@ -42,7 +45,7 @@ def _run_isolated(name: str, fn: Callable[[dict], Any], config: dict) -> Any:
 
 
 def collect_all(config: dict) -> dict:
-    """Altı collector'ı paralel çağırır, her birini izole eder. Cache YOK —
+    """Dokuz collector'ı paralel çağırır, her birini izole eder. Cache YOK —
     her çağrıda gerçekten tetiklenir; cache isteyen get_cached_summary kullanır.
     """
     jobs: dict[str, tuple[Callable[[dict], Any], dict]] = {
@@ -52,6 +55,9 @@ def collect_all(config: dict) -> dict:
         "readbunny": (readbunny_status.collect, config),
         "vault": (vault_status.collect, config),
         "maintenance": (maintenance_status.collect, config),
+        "atlas": (atlas_status.collect, config),
+        "orkestra": (orkestra_status.collect, config),
+        "harita": (harita_status.collect, config),
     }
 
     results: dict[str, Any] = {}

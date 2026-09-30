@@ -233,3 +233,65 @@ def test_broken_yaml_does_not_crash_the_server(monkeypatch, tmp_path):
     finally:
         monkeypatch.undo()
         importlib.reload(main_module)
+
+
+# --- dalga G: atlas/orkestra/harita config blokları ---------------------
+#
+# Üç blok da OPSİYONEL: eksik ya da bozuk tipli olsalar bile sunucu
+# ayakta kalmalı, collector'lar düşmemeli. Burada yalnızca yükleme
+# katmanının bunları DÜZGÜN okuduğunu (ve bozuk YAML'in hâlâ ConfigError
+# verdiğini) doğruluyoruz.
+
+DURUM_CONFIG_YAML = """
+repo_roots: ["/tmp"]
+
+atlas:
+  komut: ["atlas"]
+  zaman_asimi: 15
+
+orkestra:
+  komut: "orkestra durum"   # string de olabilir
+
+harita:
+  komut: ["harita"]
+  vault: "~/Mt3Ui55OS"
+"""
+
+
+def test_durum_blocks_are_loaded_from_yaml(tmp_path):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(DURUM_CONFIG_YAML, encoding="utf-8")
+
+    config = load_config(cfg_path)
+
+    assert config["atlas"] == {"komut": ["atlas"], "zaman_asimi": 15}
+    # string komut config'te string kalır; bölme işi collector'ın görevidir
+    assert config["orkestra"]["komut"] == "orkestra durum"
+    # `~` genişletilir (diğer tüm yollar gibi)
+    assert config["harita"]["vault"].startswith("/")
+    assert not config["harita"]["vault"].startswith("~")
+
+
+def test_durum_blocks_are_optional(tmp_path):
+    """Üç blok hiç yok — config yine sorunsuz yüklenir (collector'lar
+    `config_yok` döner, sunucu ayaktadır)."""
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text('repo_roots: ["/tmp"]\n', encoding="utf-8")
+
+    config = load_config(cfg_path)
+
+    assert "atlas" not in config
+    assert "orkestra" not in config
+    assert "harita" not in config
+
+
+@pytest.mark.parametrize("bozuk", ['atlas: 5', 'atlas: [1, 2]', 'atlas: "metin"'])
+def test_broken_durum_block_type_still_loads(tmp_path, bozuk):
+    """Blok YANLIŞ TİPLİ olsa bile config yüklenir — collector'ın
+    kendi doğrulamasına bırakılır (`config_yok` döner), sunucu düşmez."""
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(f'repo_roots: ["/tmp"]\n{bozuk}\n', encoding="utf-8")
+
+    config = load_config(cfg_path)
+
+    assert config["atlas"] in (5, [1, 2], "metin")

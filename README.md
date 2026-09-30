@@ -3,13 +3,14 @@
 Umut'un projelerinin durumunu tek panelde toplayan kontrol kulesi. Git
 repolarının durumu, cor (claude-openrouter) proxy sağlığı, BorsaSite
 pipeline'ının son çalışması, readbunny veritabanı durumu, Mt3Ui55OS
-vault'unun hijyeni ve otomatik bakım uyarıları (dolu disk, unutulmuş
-süreçler, eski commitlenmemiş değişiklik) — hepsi tek bir koyu temalı
-web panelinde, 30 saniyede bir kendini tazeleyen tek sayfada.
+vault'unun hijyeni, atlas/orkestra/harita'nın durum sayıları ve otomatik
+bakım uyarıları (dolu disk, unutulmuş süreçler, eski commitlenmemiş
+değişiklik) — hepsi tek bir koyu temalı web panelinde, 30 saniyede bir
+kendini tazeleyen tek sayfada.
 
-Offline-first değil: kule kendi başına veri üretmez, altı farklı
-kaynağa (dosya sistemi, HTTP, Postgres) bağlanıp onları okur. Bir
-kaynağa ulaşılamazsa panel çökmez — o kaynağın kartı "erişilemiyor"
+Offline-first değil: kule kendi başına veri üretmez, dokuz farklı
+kaynağa (dosya sistemi, HTTP, Postgres, alt süreç) bağlanıp onları okur.
+Bir kaynağa ulaşılamazsa panel çökmez — o kaynağın kartı "erişilemiyor"
 gösterir, diğerleri etkilenmez.
 
 ## Kurulum
@@ -43,7 +44,7 @@ başlamamak yerine bu yolu seçiyor).
 kule --notify-once
 ```
 
-Sunucuyu **başlatmaz**; altı kaynağı bir kez okur, herhangi biri
+Sunucuyu **başlatmaz**; dokuz kaynağı bir kez okur, herhangi biri
 erişilemiyorsa ya da hata veriyorsa, ya da otomatik bakım bir şey
 bulduysa uyarıyı Telegram'a gönderir ve stdout'a basar. Sorun yoksa
 `kule: her şey yolunda` basar ve hiç mesaj göndermez. Her durumda exit
@@ -87,6 +88,18 @@ maintenance:                    # hepsi OPSİYONEL — eksik alan default'a dü�
   process_names: [ollama, uvicorn, node]  # izlenecek süreç adı kalıpları
   # disk_paths: []              # boşsa repo_roots, o da boşsa "/" kontrol edilir
 
+atlas:                          # OPSİYONEL — `atlas durum --json` çalıştırılır
+  komut: ["atlas"]             # string ya da liste olabilir
+  zaman_asimi: 15              # saniye; bozuk/sıfır/negatifse 15
+
+orkestra:
+  komut: ["orkestra"]
+  zaman_asimi: 15
+
+harita:
+  komut: ["harita"]
+  # vault: "~/Mt3Ui55OS"      # verilmezse harita kendi varsayılanını kullanır
+
 telegram:
   bot_token: ""   # `kule --notify-once` bununla uyarı gönderir
   chat_id: ""     # env'den de okunabilir: KULE_TELEGRAM_BOT_TOKEN / KULE_TELEGRAM_CHAT_ID
@@ -102,7 +115,7 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
   çeker, gelen JSON ile DOM'u doldurur. Bir istek başarısız olursa
   ekranda son bilinen veri kalır, sadece sessiz bir "bağlantı koptu"
   rozeti görünür.
-- **`GET /api/summary`** — altı kaynağın JSON özeti:
+- **`GET /api/summary`** — dokuz kaynağın JSON özeti:
 
   ```json
   {
@@ -116,6 +129,21 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
       "stale_processes": {"min_hours", "names", "items": [{"pid", "name", "hours"}]},
       "stale_git": {"min_days", "items": [{"name", "dirty_count", "age_days"}]}
     },
+    "atlas": {
+      "reachable": true, "son_tarama": "2026-09-30T08:00:00+00:00", "veri_bayat": false,
+      "repo_sayisi": 12, "kirli_repo": 3, "push_bekleyen": 2, "push_bilinmeyen": 1,
+      "bayat_readme": 4, "bulgu_toplam": 5, "bulgu_onem": {"guvenlik": 2}, "todo_toplam": 40
+    },
+    "orkestra": {
+      "reachable": true, "gorev_toplam": 14, "onay_bekleyen": 1,
+      "kanitsiz_ya_da_supheli": 2, "basarisiz": 1,
+      "gorev_durum": {"onay-bekliyor": 1, "tamamlandi": 13},
+      "kota": {"gun": "2026-09-30", "toplam_istek": 87, "uyari_sayisi": 1, "veri_var": true}
+    },
+    "harita": {
+      "reachable": true, "son_indeks": "2026-09-30T07:55:00+00:00", "indeks_bayat": false,
+      "not_sayisi": 1234, "kirik_link": 3, "yetim_not": 21, "tutarlilik_uyari": null
+    },
     "collected_at": 1234567890.0
   }
   ```
@@ -124,6 +152,12 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
   anahtar `{"error": "..."}` olur, diğerleri etkilenmez. Sonuç 60
   saniye boyunca process-içi bellekte önbelleklenir (art arda hızlı
   istekler gerçek collector'ları tekrar tetiklemez).
+
+  `atlas`/`orkestra`/`harita` **bilinmeyen sayıları `null` olarak** döner —
+  `null` "ölçemedim" demektir, `0` "ölçtüm ve sıfır" demektir; panelde
+  "bilinmiyor" yazar, 0 göstermez. Bir sayı alanı int değilse ya da
+  çıktı sözleşmeye uymuyorsa (`surum != 1`, yanlış `kaynak`, JSON değil)
+  tüm kaynak `{"reachable": false, "error": "cikti_gecersiz"}` olur.
 
 `kule --notify-once` bu özeti okuyup sorunlu kaynakları kısa bir Türkçe
 uyarı metnine çevirir (`app/notifier.py::build_alert_message`): `cor`
@@ -142,6 +176,52 @@ rozet kırmızıya döner, diğer iki liste normal görünmeye devam eder.
 Bulgu, üst bardaki durum noktasını da "dikkat gerektiren nokta var"
 durumuna taşır — panel ile Telegram uyarısı aynı bulguyu aynı ciddiyetle
 gösterir.
+
+## atlas / orkestra / harita (`durum --json`)
+
+Bu üç proje kule'ye **yalnızca sayı** konuşur. Her biri kendi CLI'sine
+`durum --json` alt komutunu ekler, kule bunu `subprocess` ile çağırır:
+
+```bash
+atlas durum --json
+orkestra durum --json
+harita durum --json
+```
+
+Ortak kurallar (bkz. `app/collectors/durum_status.py`):
+
+- Kule **ağa çıkmaz, hiçbir şeyi değiştirmez**, yalnızca stdout'taki tek
+  JSON nesnesini okur. `shell=False` + argv listesiyle çağrılır.
+- Çıktı doğrulanır: geçerli JSON nesnesi, `surum == 1`, `kaynak` beklenen
+  ad, sayılar `int >= 0` (`bool` sayılmaz). **Bilinmeyen alanlar yok
+  sayılır** — kaynak yeni alan eklerse kule bozulmaz.
+- Alt sürecin **stdout/stderr'i, komut yolu, ortam değişkeni ve istisna
+  metni asla** panele ya da Telegram'a girmez. Panele yalnızca doğrulanmış
+  sayılar ve sabit hata kodları çıkar.
+- `KULE_TELEGRAM_*` ortam değişkenleri alt sürece **geçirilmez** — kule'nin
+  Telegram secret'ı alt süreçten görünmez.
+- Komut bulunamazsa / süreç zaman aşımına uğrarsa / sıfırdan farklı kod
+  dönerse sabit kodlar: `config_yok`, `komut_yok`, `zaman_asimi`,
+  `cikti_gecersiz`, `bilinmeyen_hata`. Kaynağın kendi `hata` kodu sabit
+  listedeki kodlardan biriyse o iletilir (`db_yok`, `indeks_yok`,
+  `okunamadi`), değilse içeriği ne olursa olsun `bilinmeyen_hata` yazılır.
+
+### Panel ve Telegram ayrımı
+
+Panel her sayıyı gösterir. Telegram **dar** koşullarda uyarır — spam
+olmasın diye, yalnızca gerçek arıza/uyumsuzluk:
+
+| Kaynak | Telegram'a gider | Yalnızca panelde |
+|---|---|---|
+| atlas | (yalnızca erişilememe) | `veri_bayat` (sarı), `bayat_readme`, `kirli_repo`, `push_bekleyen` |
+| orkestra | `onay_bekleyen > 0` | `basarisiz` (birikir, iptal edilene dek düşmez), `kanitsiz_ya_da_supheli`, `kota.uyari_sayisi` |
+| harita | (yalnızca erişilememe) | `indeks_bayat` (sarı), `kirik_link`, `yetim_not` |
+
+Sağ sütundakiler sürekli `> 0` olan inceleme sayaçlarıdır; her koşuda
+basılmaları bildirimi değersiz kılardı. Üç kaynağın **erişilememesi**
+uyarıdır; yapılandırılmamış (`config_yok`) kaynak "izlenmiyor" sayılır, uyarmaz.
+`veri_bayat`/`indeks_bayat` bilerek Telegram'a gitmez: atlas taraması ve harita indeksi
+elle yenilenir, vault'a ise her oturumda günlük yazılır; bayatlık neredeyse kalıcıdır.
 
 ## Otomatik bakım botu (Dalga F)
 

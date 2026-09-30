@@ -8,11 +8,12 @@ yapmak" için gereken özet bilgidir.
 
 kule: Umut'un projelerinin durumunu tek panelde toplayan kontrol
 kulesi. Git repo durumları, cor (claude-openrouter) proxy sağlığı,
-BorsaSite pipeline'ı, readbunny DB'si, Mt3Ui55OS vault hijyeni ve
-otomatik bakım uyarılarını tek bir FastAPI panelinde birleştirir.
-kule kendi başına veri üretmez — altı ayrı dış kaynağa
-(dosya sistemi/HTTP/Postgres/süreç listesi) bağlanıp okur, biri
-çökerse yalnızca o kartı "erişilemiyor" gösterir.
+BorsaSite pipeline'ı, readbunny DB'si, Mt3Ui55OS vault hijyeni,
+atlas/orkestra/harita durum sayıları ve otomatik bakım uyarılarını tek
+bir FastAPI panelinde birleştirir. kule kendi başına veri üretmez —
+dokuz ayrı dış kaynağa (dosya sistemi/HTTP/Postgres/süreç listesi/alt
+süreç) bağlanıp okur, biri çökerse yalnızca o kartı "erişilemiyor"
+gösterir.
 
 ## Komutlar
 
@@ -36,7 +37,7 @@ Testler `tests/` altında, `python -m pytest` ile çalışır (dev bağımlılı
 ```
 app/
   config.py           # config.yaml yükleyici — yoksa ConfigError, example'a SESSİZCE düşmez
-  aggregator.py        # 6 collector'ı paralel çağırır, her biri izole, 60sn TTL cache
+  aggregator.py        # 9 collector'ı paralel çağırır, her biri izole, 60sn TTL cache
   notifier.py         # özet -> kısa Türkçe uyarı metni + Telegram Bot API'ye gönderim
   cli.py              # `kule` komutu: sunucuyu başlatır veya --notify-once ile tek seferlik bildirim
   collectors/
@@ -46,6 +47,10 @@ app/
     readbunny_status.py # Postgres links tablosundan özet (reachable/last_updated/error/pending/total)
     vault_status.py     # Mt3Ui55OS vault'unu okur: kırık wikilink, yetim not, açık Threads.md hikaye sayısı
     maintenance_status.py # Dalga F: disk doluluğu + unutulmuş süreçler + eski kirli repo (SADECE raporlar)
+    durum_status.py     # `durum --json` sözleşmesinin ORTAK koşucusu (subprocess + çıktı doğrulama)
+    atlas_status.py     # `atlas durum --json` -> repo/bulgu/todo sayıları
+    orkestra_status.py  # `orkestra durum --json` -> görev/onay/kota sayıları
+    harita_status.py    # `harita durum --json` -> indeks/not/kırık link sayıları
   main.py              # FastAPI app — GET / (panel HTML), GET /api/summary (aggregator JSON)
   web/
     page.py             # render_dashboard_html() — statik HTML iskelet (veri içermez)
@@ -55,7 +60,7 @@ config.yaml.example    # şablon, secret alanları boş
 config.yaml            # gerçek değerler — .gitignore'da, ASLA commit edilmez
 ```
 
-Akış: `config.yaml` (`app/config.py::load_config`) → altı collector
+Akış: `config.yaml` (`app/config.py::load_config`) → dokuz collector
 (`app/collectors/*.py::collect(config)`) → `app/aggregator.py::
 collect_all` (paralel + izolasyon) / `get_cached_summary` (60sn TTL) →
 `app/main.py` (`GET /api/summary` bu JSON'u döner, `GET /` panel
@@ -110,9 +115,13 @@ istekte 500 + "ne yapman gerektiğini" söyleyen bir mesaj döner.
    `maintenance` bu üçünün de dışında bir DÖRDÜNCÜ şekildir (alt
    bölümlerden oluşan dict) ve `build_alert_message` içinde
    `MAINTENANCE_KEY` eşleşmesiyle ayrı bir yola (`_maintenance_sentences`)
-   yönlendirilir; kaynak kotasına (`MAX_LISTED_SOURCES`) girmez. Yeni
-   collector farklı bir şekil döndürüyorsa ya `_describe`'a dal ekle ya
-   da `build_alert_message`'de kendi yolunu yaz, yoksa o kaynağın
+   yönlendirilir; kaynak kotasına (`MAX_LISTED_SOURCES`) girmez.
+   `atlas`/`orkestra`/`harita` ise BEŞİNCİ yoldur: erişilemezlikleri
+   `_describe`'ın mevcut dalına uyar (`{"reachable": False, "error":
+   <sabit kod>}`), ama `reachable: True` iken sayı alanlarındaki uyarıları
+   `_durum_sentences` üretir ve `DURUM_SOURCES` eşleşmesiyle yönlendirilir.
+   Yeni collector farklı bir şekil döndürüyorsa ya `_describe`'a dal
+   ekle ya da `build_alert_message`'de kendi yolunu yaz, yoksa o kaynağın
    hataları bildirimde hiç görünmez.
 
 ## Kritik kurallar (bunları asla bozma)
@@ -156,6 +165,26 @@ istekte 500 + "ne yapman gerektiğini" söyleyen bir mesaj döner.
   (`True`, liste) olsa bile collector default'larla çalışır. Yeni bir
   eşik eklerken aynı yardımcıdan geçir, yoksa bozuk config collector'ı
   sessizce düşürür.
+- **Alt süreçten hiçbir ham metin dışarı çıkmaz** (`atlas`/`orkestra`/
+  `harita`): alt sürecin stdout/stderr'i, komut yolu, ortam değişkeni ve
+  istisna metni ASLA panele ya da Telegram'a girmez. Panele yalnızca
+  (a) doğrulanmış sayılar/kısa etiketler ve (b) `durum_status.py`'deki
+  **SABİT** hata kodları (`config_yok`, `komut_yok`, `zaman_asimi`,
+  `cikti_gecersiz`, `calistirilamadi`, `bilinmeyen_hata`) çıkar. Kaynağın
+  kendi `hata` kodu sabit listede (`db_yok`/`indeks_yok`/`okunamadi`)
+  değilse **içeriği kopyalanmaz** — `bilinmeyen_hata` yazılır. Biri
+  `str(e)` ya da `proc.stderr`'ı mesaja koyarsa bu madde ihlal edilmiş
+  demektir (`test_no_secret_leak*` testleri bunu kazara değil, bilerek
+  güvenceye alır).
+- **`bool` bir sayı DEĞİLDİR**: `int`'in alt türü olduğu için
+  `isinstance(True, int)` doğrudur; `{"repo_sayisi": true}` geçerli JSON'dur
+  ama "1 repo" demek değildir. Doğrulama `is_count()`'ten geçer.
+- **Bilinmeyen sayı `null`'dur, `0` değil**: sözleşme bunu açıkça ister.
+  Panelde `null` → "bilinmiyor" (`script.py::count`), JS'te `|| 0` gibi bir
+  kısayol sessizce "ölçtüm ve sıfır" uydurur — kullanma.
+- **`KULE_TELEGRAM_*` alt sürece GEÇİRİLMEZ** (`durum_status.py::
+  _child_env`): kule'nin Telegram secret'ı alt sürecin `env`'inde
+  görünmemeli.
 
 ## Test yazarken
 

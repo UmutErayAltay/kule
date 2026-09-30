@@ -287,3 +287,126 @@ def test_stylesheet_has_sixth_stat_tile_capacity(dashboard_html):
     assert "repeat(3, 1fr)" in styles_module.DASHBOARD_CSS
     # bakım kartı tam genişlikte bir satır alıyor
     assert ".card-wide" in styles_module.DASHBOARD_CSS
+
+
+# --- dalga G: atlas / orkestra / harita kartları -------------------------
+#
+# Aynı sözleşme, yeni üç kaynak için: `page.py`'daki her DOM id
+# `script.py`'da karşılık gelen bir `qs()`/`setText()`/`setStatTile()`
+# çağrısına sahip olmalı ve tersi de doğru (JS'te olan ama HTML'de olmayan
+# id de sessizce hiçbir işe yaramaz).
+
+DURUM_DOM_IDS = [
+    "atlas-badge",
+    "atlas-error",
+    "atlas-bulgu-onem-kv",
+    "atlas-repo-sayisi",
+    "atlas-kirli-repo",
+    "atlas-push-bekleyen",
+    "atlas-push-bilinmeyen",
+    "atlas-bayat-readme",
+    "atlas-bulgu-toplam",
+    "atlas-todo-toplam",
+    "atlas-son-tarama",
+    "orkestra-badge",
+    "orkestra-error",
+    "orkestra-gorev-durum-kv",
+    "orkestra-kota-kv",
+    "orkestra-gorev-toplam",
+    "orkestra-onay-bekleyen",
+    "orkestra-basarisiz",
+    "orkestra-kanitsiz",
+    "harita-badge",
+    "harita-error",
+    "harita-not-sayisi",
+    "harita-kirik-link",
+    "harita-yetim-not",
+    "harita-tutarlilik-uyari",
+    "harita-son-indeks",
+]
+
+DURUM_STAT_TILE_PREFIXES = ["stat-atlas", "stat-orkestra", "stat-harita"]
+
+
+@pytest.mark.parametrize("dom_id", DURUM_DOM_IDS)
+def test_every_durum_dom_id_is_wired_in_script(dashboard_html, dom_id):
+    """Yeni kartların her id'si HTML'de var VE JS'te kullanılıyor."""
+    assert f'id="{dom_id}"' in dashboard_html, f"{dom_id} HTML'de yok"
+    assert dom_id in script_module.DASHBOARD_JS, f"{dom_id} JS'te kullanılmıyor"
+
+
+@pytest.mark.parametrize("prefix", DURUM_STAT_TILE_PREFIXES)
+def test_every_durum_stat_tile_is_wired_in_script(dashboard_html, prefix):
+    """Yeni istatistik kutuları da tile/value/sub üçlüsüyle birlikte
+    `setStatTile("<prefix>"` çağrısına bağlı."""
+    for suffix in ("-tile", "-value", "-sub"):
+        assert f'id="{prefix}{suffix}"' in dashboard_html, f"{prefix}{suffix} HTML'de yok"
+    assert f'"{prefix}"' in script_module.DASHBOARD_JS, f"{prefix} JS'te kullanılmıyor"
+
+
+def test_durum_cards_are_called_from_render_entrypoint():
+    """Asıl senkronizasyon kuralı: kart id'leri HTML'de olmak yetmez,
+    `render()` onlara ULAŞMALI — aksi halde kart "yükleniyor…" satırında
+    kalır ve hiçbir hata fırlatmaz."""
+    js = script_module.DASHBOARD_JS
+    render_start = js.index("function render(data) {")
+    render_body = js[render_start : js.index("function setConnLost", render_start)]
+    for cagri in (
+        "renderAtlas(data.atlas);",
+        "renderOrkestra(data.orkestra);",
+        "renderHarita(data.harita);",
+    ):
+        assert cagri in render_body, f"{cagri} render() gövdesinde yok"
+
+
+def test_durum_cards_are_present_alongside_existing_cards(dashboard_html):
+    """Yeni kartlar EKLENDİ — mevcut kartların hiçbiri kaybolmamalı."""
+    for heading in (
+        "cor (claude-openrouter)",
+        "BorsaSite",
+        "readbunny",
+        "vault (Mt3Ui55OS)",
+        "harita (vault)",
+        "bakım (raporlar, müdahale etmez)",
+    ):
+        assert heading in dashboard_html
+    # yeni kart etiketleri
+    assert ">atlas<" in dashboard_html.replace(" ", "")
+    assert ">orkestra<" in dashboard_html.replace(" ", "")
+
+
+def test_durum_json_shape_is_documented_in_page_docstring():
+    """page.py docstring'i `/api/summary` şeklini belgeliyor; üç yeni alan
+    da orada geçmeli."""
+    for anahtar in ('"atlas"', '"orkestra"', '"harita"'):
+        assert anahtar in page_module.__doc__
+
+
+def test_durum_stat_tiles_fit_the_grid(dashboard_html):
+    """Dokuz kutu üç kolonlu ızgarada üç satır olur — CSS'te altı kutunun
+    ızgarası kalmamalı, `.card-wide` yeni geniş kartlar için de var."""
+    assert "repeat(3, 1fr)" in styles_module.DASHBOARD_CSS
+    assert ".card-wide" in styles_module.DASHBOARD_CSS
+    # dokuz stat-tile gerçekten var mı
+    assert dashboard_html.count('class="stat-tile"') == 9
+
+
+def test_unknown_counts_render_as_bilinmiyor_not_zero():
+    """`null` sayılar panelde 0 DEĞİL "bilinmiyor" olarak görünür —
+    sözleşmenin "bilinmeyen için null (0 DEĞİL)" kuralının panel karşılığı.
+    JS'te `|| 0` gibi bir kısayol olsaydı sıfır basılırdı.
+
+    Kontrol YALNIZCA yeni kaynakların gövdelerine uygulanır: eski
+    git/vault kodunda zaten `|| 0` kullanımı var (o sayaçların `null`
+    sözleşmesi farklıdır) ve bu dalga onları değiştirmiyor."""
+    js = script_module.DASHBOARD_JS
+    assert 'var UNKNOWN = "bilinmiyor";' in js
+    assert "function count(value)" in js
+
+    for baslangic, bitis in (
+        ("function count(value)", "function setCountText"),
+        ("function renderAtlas(", "function renderCor("),
+    ):
+        govde = js[js.index(baslangic) : js.index(bitis)]
+        assert "|| 0" not in govde, f"{baslangic} gövdesinde `|| 0` kısayolu var"
+        assert "?? 0" not in govde, f"{baslangic} gövdesinde `?? 0` kısayolu var"

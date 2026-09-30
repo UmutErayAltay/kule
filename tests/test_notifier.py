@@ -4,6 +4,8 @@ ağa çıkılmadığı ayrıca sayacla doğrulanır.
 """
 from __future__ import annotations
 
+import pytest
+
 from app import notifier
 
 
@@ -616,3 +618,360 @@ def test_send_silences_httpx_log_during_request(monkeypatch):
         logger.removeHandler(handler)
 
     assert logging.INFO not in seen
+
+
+# -------------------------------------------- durum --json kaynakları (atlas/
+# orkestra/harita) — sözleşmedeki DAR uyarı koşulları.
+#
+# Kural (sözleşme.md): uyarı koşulları spam olmasın diye dardır. Sürekli >0
+# olan sayaçlar (bayat_readme, kirik_link, yetim_not, kirli_repo) Telegram'a
+# GİTMEZ; yalnızca panelde görünür. Aşağıdaki testler hem "gider" hem
+# "gitmez" taraflarını, hem de 0/1 sınırlarını kilitler.
+
+GECERLI_ATLAS = {
+    "reachable": True,
+    "son_tarama": "2026-09-30T08:00:00+00:00",
+    "veri_bayat": False,
+    "repo_sayisi": 12,
+    "kirli_repo": 3,
+    "push_bekleyen": 2,
+    "push_bilinmeyen": 1,
+    "bayat_readme": 4,
+    "bulgu_toplam": 5,
+    "bulgu_onem": {"guvenlik": 2},
+    "todo_toplam": 40,
+}
+GECERLI_ORKESTRA = {
+    "reachable": True,
+    "gorev_toplam": 14,
+    "gorev_durum": {"onay-bekliyor": 1, "tamamlandi": 13},
+    "onay_bekleyen": 1,
+    "kanitsiz_ya_da_supheli": 2,
+    "basarisiz": 1,
+    "kota": {"gun": "2026-09-30", "toplam_istek": 87, "uyari_sayisi": 1, "veri_var": True},
+}
+GECERLI_HARITA = {
+    "reachable": True,
+    "son_indeks": "2026-09-30T07:55:00+00:00",
+    "indeks_bayat": False,
+    "not_sayisi": 1234,
+    "kirik_link": 3,
+    "yetim_not": 21,
+    "tutarlilik_uyari": None,
+}
+
+
+def test_atlas_saglikliyken_uyari_uretmez():
+    """Sıfırla sıfır ama BIRÇOK pozitif sayaç var (kirli repo, push bekleyen,
+    bayat README) — yine de mesaj ÜRETİLMEZ. Spam korumasının asıl testi."""
+    summary = {"atlas": GECERLI_ATLAS, "collected_at": 1_700_000_000.0}
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_atlas_veri_bayat_telegrama_gitmez():
+    """Atlas taraması elle yenilenir: bayatlık kalıcı bir durum olabilir ve
+    her cron çalışmasında mesaj üretirdi. Panelde sarı, Telegram'da sessiz."""
+    summary = {"atlas": dict(GECERLI_ATLAS, veri_bayat=True), "collected_at": 1_700_000_000.0}
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_atlas_sayilari_telegram_mesajina_girmez():
+    """`bayat_readme`/`kirli_repo`/`push_bekleyen` panelde görünür ama
+    Telegram mesajına GİRMEZ — başka bir kaynağın uyarısı mesaj üretse bile."""
+    message = notifier.build_alert_message(
+        {
+            "atlas": dict(GECERLI_ATLAS, veri_bayat=True),
+            "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=1),
+            "collected_at": 1_700_000_000.0,
+        }
+    )
+
+    assert message is not None
+    assert "atlas" not in message
+    for sayi_alan_adi in ("bayat_readme", "kirli_repo", "push_bekleyen", "bulgu_toplam", "todo_toplam"):
+        assert sayi_alan_adi not in message
+
+
+@pytest.mark.parametrize("kaynak", ["atlas", "orkestra", "harita"])
+def test_yapilandirilmamis_kaynak_uyari_uretmez(kaynak):
+    """`config_yok`: opsiyonel kaynak hiç kurulmamış, "erişilemiyor" değil
+    "izlenmiyor" — her cron çalışmasında mesaj gitmemeli."""
+    summary = {kaynak: {"reachable": False, "error": "config_yok"}, "collected_at": 1.0}
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_yapilandirilmis_ama_erisilemeyen_kaynak_yine_uyarir():
+    """`config_yok` muafiyeti yalnızca o koda özgü: komut yok/zaman aşımı uyarır."""
+    for kod in ("komut_yok", "zaman_asimi", "cikti_gecersiz", "db_yok"):
+        message = notifier.build_alert_message(
+            {"harita": {"reachable": False, "error": kod}, "collected_at": 1.0}
+        )
+
+        assert message is not None
+        assert kod in message
+
+
+def test_atlas_erisilemezse_uyari_uretir():
+    message = notifier.build_alert_message(
+        {"atlas": {"reachable": False, "error": "komut_yok"}, "collected_at": 1.0}
+    )
+
+    assert message is not None
+    assert "atlas erişilemiyor" in message
+    assert "komut_yok" in message
+
+
+def test_atlas_sabit_hata_kodu_telif_edilir():
+    message = notifier.build_alert_message(
+        {"atlas": {"reachable": False, "error": "db_yok"}, "collected_at": 1.0}
+    )
+
+    assert message is not None
+    assert "db_yok" in message
+
+
+@pytest.mark.parametrize(
+    "sabit_kod",
+    [
+        "komut_yok",
+        "zaman_asimi",
+        "cikti_gecersiz",
+        "calistirilamadi",
+        "bilinmeyen_hata",
+        "db_yok",
+        "indeks_yok",
+        "okunamadi",
+    ],
+)
+def test_durum_hata_kodu_oldugu_gibi_iletilir(sabit_kod):
+    """Collector'ın ürettiği SABİT hata kodu mesajda olduğu gibi görünür —
+    panelde gördüğü kod Telegram'da da aynıdır, teşhis için şart.
+    (`config_yok` hariç: yapılandırılmamış kaynak izlenmiyor sayılır, bkz.
+    `test_yapilandirilmamis_kaynak_uyari_uretmez`.)"""
+    message = notifier.build_alert_message(
+        {"atlas": {"reachable": False, "error": sabit_kod}, "collected_at": 1.0}
+    )
+
+    assert message is not None
+    assert sabit_kod in message
+    assert "atlas erişilemiyor" in message
+
+
+def test_orkestra_her_ikisi_sifirken_uyari_yok():
+    summary = {
+        "orkestra": dict(
+            GECERLI_ORKESTRA, onay_bekleyen=0, basarisiz=0, gorev_durum={"tamamlandi": 14}
+        ),
+        "collected_at": 1.0,
+    }
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_orkestra_onay_bekleyen_bir_kenar_deger():
+    message = notifier.build_alert_message(
+        {"orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=1, basarisiz=0), "collected_at": 1.0}
+    )
+
+    assert message is not None
+    assert "orkestra onay bekleyen görev: 1" in message
+
+
+def test_orkestra_basarisiz_tek_basina_uyari_uretmez():
+    """`basarisiz` biriken bir sayaç (son koşusu başarısız her görev, iptal
+    edilene dek): uyarı koşulu olsaydı tek bir eski görev her cron
+    çalışmasında sonsuza dek mesaj üretirdi."""
+    for sayi in (1, 5, 10**6):
+        summary = {
+            "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=0, basarisiz=sayi),
+            "collected_at": 1.0,
+        }
+
+        assert notifier.build_alert_message(summary) is None
+
+
+def test_orkestra_onay_bekleyenle_birlikte_basarisiz_mesaja_girmez():
+    message = notifier.build_alert_message(
+        {"orkestra": GECERLI_ORKESTRA, "collected_at": 1.0}
+    )
+
+    assert message is not None
+    assert "orkestra onay bekleyen görev: 1" in message
+    assert "başarısız" not in message
+
+
+def test_orkestra_kanitsiz_ve_kota_telegrama_gitmez():
+    """`kanitsiz_ya_da_supheli` bir inceleme bulgusu, `kota.uyari_sayisi`
+    bir uyarı sayacı — ikisi de sürekli >0 olabilir, mesaja GİRMEZ."""
+    summary = {
+        "orkestra": dict(
+            GECERLI_ORKESTRA, onay_bekleyen=0, basarisiz=0, kanitsiz_ya_da_supheli=7
+        ),
+        "collected_at": 1.0,
+    }
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_orkestra_gorev_durum_etiketleri_telegrama_gitmez():
+    """`gorev_durum` haritası görev durumlarını taşır; mesajda yer almaz
+    (yalnızca sayı konuşulur)."""
+    summary = {
+        "orkestra": dict(
+            GECERLI_ORKESTRA, gorev_durum={"onay-bekliyor": 4}, onay_bekleyen=0, basarisiz=0
+        ),
+        "collected_at": 1.0,
+    }
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_orkestra_erisilemezse_uyari_uretir():
+    message = notifier.build_alert_message(
+        {"orkestra": {"reachable": False, "error": "zaman_asimi"}, "collected_at": 1.0}
+    )
+
+    assert message is not None
+    assert "orkestra erişilemiyor" in message
+    assert "zaman_asimi" in message
+
+
+def test_harita_saglikliyken_uyari_yok():
+    """kırık link 3 / yetim not 21 — sürekli pozitif, mesaj YOK."""
+    assert notifier.build_alert_message({"harita": GECERLI_HARITA, "collected_at": 1.0}) is None
+
+
+def test_harita_indeks_bayat_telegrama_gitmez():
+    """Vault'a her oturumda makine günlük yazar, indeks elle yenilenir:
+    bayatlık neredeyse kalıcıdır, uyarı olsaydı sürekli mesaj üretirdi."""
+    for bayat in (True, False, None):
+        summary = {"harita": dict(GECERLI_HARITA, indeks_bayat=bayat), "collected_at": 1.0}
+
+        assert notifier.build_alert_message(summary) is None
+
+
+def test_harita_kirik_link_ve_yetim_not_telegrama_gitmez():
+    message = notifier.build_alert_message(
+        {
+            "harita": dict(GECERLI_HARITA, indeks_bayat=True),
+            "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=1),
+            "collected_at": 1.0,
+        }
+    )
+
+    assert message is not None
+    assert "kırık link" not in message
+    assert "yetim" not in message
+    assert "1234" not in message
+    assert "harita" not in message
+
+
+def test_harita_indeks_yok_uyarisi_uretir():
+    message = notifier.build_alert_message(
+        {"harita": {"reachable": False, "error": "indeks_yok"}, "collected_at": 1.0}
+    )
+
+    assert message is not None
+    assert "harita erişilemiyor" in message
+    assert "indeks_yok" in message
+
+
+def test_harita_erisilemezlik_ve_bulgu_birlikte_iki_kaynakli_mesaj():
+    summary = {
+        "harita": {"reachable": False, "error": "indeks_yok"},
+        "atlas": {"reachable": False, "error": "db_yok"},
+        "collected_at": 1_700_000_000.0,
+    }
+
+    message = notifier.build_alert_message(summary)
+
+    assert message is not None
+    assert "harita erişilemiyor" in message
+    assert "atlas erişilemiyor" in message
+
+
+# ---- sınır durumları: bool sayı DEĞİLDİR, null sayı DEĞİLDİR ----------
+
+
+@pytest.mark.parametrize(
+    "deger",
+    [True, False, None, "3", 1.5, -1, [], {}],
+)
+def test_orkestra_bool_null_ve_bozuk_sayilar_uyari_uretmez(deger):
+    """`onay_bekleyen: true` "1 görev" demek değildir; `null` "bilinmiyor"
+    demektir — ikisi de eşiği aşmış sayılmaz."""
+    summary = {
+        "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=deger, basarisiz=0),
+        "collected_at": 1.0,
+    }
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_orkestra_bool_ve_null_basarisiz_uyari_uretmez():
+    summary = {
+        "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=0, basarisiz=True),
+        "collected_at": 1.0,
+    }
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_durum_kaynaklari_reachable_anahtari_yoksa_uyari_uretmez():
+    """`reachable` alanı yoksa "erişilemiyor" varsayılmamalı — sözleşme
+    başarıda `reachable: True` döner; eksikse belirsizliktir, uyarı değil."""
+    summary = {"atlas": {"veri_bayat": True}, "collected_at": 1.0}
+
+    assert notifier.build_alert_message(summary) is None
+
+
+# ---- mesaj tavanı: durum satırları da sınırlanmalı ---------------------
+
+
+def test_durum_lines_with_both_sources_keep_message_within_limit():
+    """Üç kaynak da sorunlu — mesaj yine de MAX_MESSAGE_CHARS altında
+    kalmalı (durum satırları da tavana tabidir)."""
+    summary = {
+        "atlas": {"reachable": False, "error": "db_yok"},
+        "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=10**6, basarisiz=10**6),
+        "harita": {"reachable": False, "error": "indeks_yok"},
+        "collected_at": 1_700_000_000.0,
+    }
+
+    message = notifier.build_alert_message(summary)
+
+    assert message is not None
+    assert len(message) <= notifier.MAX_MESSAGE_CHARS
+
+
+def test_durum_lines_alone_produce_valid_header():
+    """Yalnızca durum kaynakları sorunluysa header düzgün üretilir."""
+    message = notifier.build_alert_message({"orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=1)})
+
+    assert message is not None
+    assert message.startswith("⚠️ kule uyarısı")
+
+
+def test_durum_lines_dont_enter_source_quota():
+    """Durum satırları bakım gibi kaynak kotasına girmez — ayrı satır
+    listesi olarak eklenir, `MAX_LISTED_SOURCES` sayımına karışmaz."""
+    summary = {
+        "atlas": dict(GECERLI_ATLAS, veri_bayat=True),
+        "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=2, basarisiz=1),
+        "harita": {"reachable": False, "error": "indeks_yok"},
+        "collected_at": 1_700_000_000.0,
+    }
+
+    message = notifier.build_alert_message(summary)
+
+    assert message is not None
+    lines = message.split("\n")
+    # header (erişilemeyen kaynak) + orkestra satırı + zaman damgası
+    assert lines[0].startswith("⚠️ kule uyarısı")
+    assert "harita erişilemiyor" in lines[0]
+    assert "orkestra onay bekleyen görev: 2" in lines
+    assert not any("başarısız" in satir for satir in lines)
+    assert not any("bayat" in satir for satir in lines)
