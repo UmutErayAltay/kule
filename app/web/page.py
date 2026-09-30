@@ -25,10 +25,6 @@ anahtarı altında, hatalıysa `{"error": ...}` ile:
                    "kota": {"gun": <iso gun|null>, "toplam_istek": int, "uyari_sayisi": int,
                             "veri_var": <bool|null>} | null}
               | {"reachable": false, "error": "<sabit kod>"},
-      "harita": {"reachable": true, "son_indeks": <iso|null>, "indeks_bayat": <bool|null>,
-                 "not_sayisi": <int|null>, "kirik_link": ..., "yetim_not": ...,
-                 "tutarlilik_uyari": <int|null>}
-              | {"reachable": false, "error": "<sabit kod>"},
       "collected_at": <epoch saniye>
     }
 
@@ -39,11 +35,11 @@ listesidir (dalga F) — panelde de öyle gösterilir: alt bölümlerin
 kendi başlıkları altında satır satır basılır, hiçbiri boş değilse
 sakin bir "bulgu yok" durumunda kalır.
 
-`atlas`/`orkestra`/`harita` `durum --json` sözleşmesinden gelen sayılardır
+`atlas`/`orkestra` `durum --json` sözleşmesinden gelen sayılardır
 (bakış: `app/collectors/durum_status.py`). Sayı alanları `int` DEĞİLSE
 `null` gelir — "bilinmiyor" 0 gibi gösterilmez, panelde "bilinmiyor"
 yazar. Erişilemeyen kaynak `{"reachable": false, "error": <sabit kod>}`.
-Bu üç sayacın (`bayat_readme`, `kırık link`, `yetim not`) panelde görünmesi
+Bu sayaçların (`bayat_readme`, `kirli_repo`, `basarisiz`) panelde görünmesi
 Telegram'a GİTMESİ demek değildir: `notifier.py` yalnızca kaynağa
 erişilememesini ve `onay_bekleyen > 0` koşulunu uyarı sayar.
 
@@ -122,11 +118,6 @@ _HTML_MID = """</style>
       <div class="stat-label">orkestra onay bekleyen</div>
       <div class="stat-value" id="stat-orkestra-value">—</div>
       <div class="stat-sub" id="stat-orkestra-sub"></div>
-    </div>
-    <div class="stat-tile" id="stat-harita-tile">
-      <div class="stat-label">harita kırık link</div>
-      <div class="stat-value" id="stat-harita-value">—</div>
-      <div class="stat-sub" id="stat-harita-sub"></div>
     </div>
   </div>
 </section>
@@ -249,23 +240,6 @@ _HTML_MID = """</style>
         <dl class="kv-list" id="orkestra-gorev-durum-kv"><div class="empty-row">yükleniyor…</div></dl>
         <p class="eyebrow" style="margin-top:10px;">kota</p>
         <dl class="kv-list" id="orkestra-kota-kv"><div class="empty-row">yükleniyor…</div></dl>
-      </div>
-    </div>
-
-    <div class="card-wide">
-      <p class="eyebrow">harita (vault)</p>
-      <div class="card">
-        <div class="card-head">
-          <span class="badge badge-neutral" id="harita-badge">bekliyor</span>
-        </div>
-        <div class="stat-sub num-bad" id="harita-error"></div>
-        <dl class="kv-list">
-          <dt>toplam not</dt><dd id="harita-not-sayisi">—</dd>
-          <dt>kırık link</dt><dd id="harita-kirik-link">—</dd>
-          <dt>yetim not</dt><dd id="harita-yetim-not">—</dd>
-          <dt>tutarlılık uyarısı</dt><dd id="harita-tutarlilik-uyari">—</dd>
-          <dt>son indeks</dt><dd id="harita-son-indeks">—</dd>
-        </dl>
       </div>
     </div>
 

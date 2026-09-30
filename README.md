@@ -3,7 +3,7 @@
 Umut'un projelerinin durumunu tek panelde toplayan kontrol kulesi. Git
 repolarının durumu, cor (claude-openrouter) proxy sağlığı, BorsaSite
 pipeline'ının son çalışması, readbunny veritabanı durumu, Mt3Ui55OS
-vault'unun hijyeni, atlas/orkestra/harita'nın durum sayıları ve otomatik
+vault'unun hijyeni, atlas/orkestra'nın durum sayıları ve otomatik
 bakım uyarıları (dolu disk, unutulmuş süreçler, eski commitlenmemiş
 değişiklik) — hepsi tek bir koyu temalı web panelinde, 30 saniyede bir
 kendini tazeleyen tek sayfada.
@@ -96,10 +96,6 @@ orkestra:
   komut: ["orkestra"]
   zaman_asimi: 15
 
-harita:
-  komut: ["harita"]
-  # vault: "~/Mt3Ui55OS"      # verilmezse harita kendi varsayılanını kullanır
-
 telegram:
   bot_token: ""   # `kule --notify-once` bununla uyarı gönderir
   chat_id: ""     # env'den de okunabilir: KULE_TELEGRAM_BOT_TOKEN / KULE_TELEGRAM_CHAT_ID
@@ -140,10 +136,6 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
       "gorev_durum": {"onay-bekliyor": 1, "tamamlandi": 13},
       "kota": {"gun": "2026-09-30", "toplam_istek": 87, "uyari_sayisi": 1, "veri_var": true}
     },
-    "harita": {
-      "reachable": true, "son_indeks": "2026-09-30T07:55:00+00:00", "indeks_bayat": false,
-      "not_sayisi": 1234, "kirik_link": 3, "yetim_not": 21, "tutarlilik_uyari": null
-    },
     "collected_at": 1234567890.0
   }
   ```
@@ -153,7 +145,7 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
   saniye boyunca process-içi bellekte önbelleklenir (art arda hızlı
   istekler gerçek collector'ları tekrar tetiklemez).
 
-  `atlas`/`orkestra`/`harita` **bilinmeyen sayıları `null` olarak** döner —
+  `atlas`/`orkestra` **bilinmeyen sayıları `null` olarak** döner —
   `null` "ölçemedim" demektir, `0` "ölçtüm ve sıfır" demektir; panelde
   "bilinmiyor" yazar, 0 göstermez. Bir sayı alanı int değilse ya da
   çıktı sözleşmeye uymuyorsa (`surum != 1`, yanlış `kaynak`, JSON değil)
@@ -177,16 +169,23 @@ Bulgu, üst bardaki durum noktasını da "dikkat gerektiren nokta var"
 durumuna taşır — panel ile Telegram uyarısı aynı bulguyu aynı ciddiyetle
 gösterir.
 
-## atlas / orkestra / harita (`durum --json`)
+## atlas / orkestra (`durum --json`)
 
-Bu üç proje kule'ye **yalnızca sayı** konuşur. Her biri kendi CLI'sine
+Bu iki proje kule'ye **yalnızca sayı** konuşur. Her biri kendi CLI'sine
 `durum --json` alt komutunu ekler, kule bunu `subprocess` ile çağırır:
 
 ```bash
 atlas durum --json
 orkestra durum --json
-harita durum --json
 ```
+
+> **harita** da aynı sözleşmeyi konuşur (`harita durum --json`,
+> `app/collectors/harita_status.py`) ama panelde **kartı yok**: kırık link ve
+> yetim not için `vault` kartı kullanılır. Yetim tanımı harita'nınkiyle
+> aynıdır: ne link alan ne link veren, kökteki `.md` dosyaları ve `daily/`
+> günlükleri hariç (makine her oturumda günlük yazar, bunlar yüzlerce sahte
+> "yetim" üretirdi). `.claude`, `receipts`, `.obsidian`, `.git`, `.agents`,
+> `node_modules`, `📥 000-Inbox/Dump` sayıma girmez.
 
 Ortak kurallar (bkz. `app/collectors/durum_status.py`):
 
@@ -215,13 +214,12 @@ olmasın diye, yalnızca gerçek arıza/uyumsuzluk:
 |---|---|---|
 | atlas | (yalnızca erişilememe) | `veri_bayat` (sarı), `bayat_readme`, `kirli_repo`, `push_bekleyen` |
 | orkestra | `onay_bekleyen > 0` | `basarisiz` (birikir, iptal edilene dek düşmez), `kanitsiz_ya_da_supheli`, `kota.uyari_sayisi` |
-| harita | (yalnızca erişilememe) | `indeks_bayat` (sarı), `kirik_link`, `yetim_not` |
 
 Sağ sütundakiler sürekli `> 0` olan inceleme sayaçlarıdır; her koşuda
-basılmaları bildirimi değersiz kılardı. Üç kaynağın **erişilememesi**
+basılmaları bildirimi değersiz kılardı. İki kaynağın **erişilememesi**
 uyarıdır; yapılandırılmamış (`config_yok`) kaynak "izlenmiyor" sayılır, uyarmaz.
-`veri_bayat`/`indeks_bayat` bilerek Telegram'a gitmez: atlas taraması ve harita indeksi
-elle yenilenir, vault'a ise her oturumda günlük yazılır; bayatlık neredeyse kalıcıdır.
+`veri_bayat` bilerek Telegram'a gitmez: atlas taraması elle yenilenir,
+bayatlık uzun süre kalıcı olabilir ve her cron çalışmasında mesaj üretirdi.
 
 ## Otomatik bakım botu (Dalga F)
 

@@ -4,14 +4,14 @@ Sayfa yüklenince ve her 30 saniyede bir `/api/summary`'yi çeker; şekli
 `app/aggregator.py::collect_all`'ın döndürdüğü dict ile birebir aynı
 varsayılır: {git: [...], cor: {...}, borsasite: {...}, readbunny: {...},
 vault: {...}, maintenance: {...}, atlas: {...}, orkestra: {...},
-harita: {...}, collected_at: <epoch saniye>}. Her
+collected_at: <epoch saniye>}. Her
 collector kendi `{"error": ...}` ile izole düştüğü için burada da her
 okuma "alan yoksa/obje değilse boş göster" ilkesiyle savunmalı yazılıyor
 — backend'in tam şeklini bilmeden (henüz ayrı bir ajan yazıyor) kırılgan
 olmamak için. `maintenance` alt bölümleri de aynı izolasyonu taşır:
 biri düşse bile diğer iki listenin verisi ekranda kalır.
 
-`atlas`/`orkestra`/`harita` sayı alanlarında `null` = BİLİNMİYOR'dur ve
+`atlas`/`orkestra` sayı alanlarında `null` = BİLİNMİYOR'dur ve
 `count()` ile "bilinmiyor" yazılır — `|| 0` gibi bir kısayol sessizce sıfır
 uydurur ve sözleşmenin "0 DEĞİL" kuralını panelde ihlal ederdi.
 
@@ -247,21 +247,6 @@ DASHBOARD_JS = """
         count(ork.gorev_toplam) + " görev" + (ork.basarisiz != null ? " · " + count(ork.basarisiz) + " başarısız" : "")
       );
     }
-
-    // harita: indeks bayatsa kırık link/şüpheli not sayıları güvenilmezdir.
-    var harita = isPlainObject(data.harita) ? data.harita : {};
-    if (harita.reachable !== true) {
-      setStatTile("stat-harita", "ULAŞILAMIYOR", "bad", harita.error ? String(harita.error).slice(0, 48) : "");
-    } else {
-      setStatTile(
-        "stat-harita",
-        count(harita.kirik_link),
-        harita.indeks_bayat === true ? "warn" : "ok",
-        harita.indeks_bayat === true
-          ? "indeks bayat · " + fmtDate(harita.son_indeks)
-          : count(harita.yetim_not) + " yetim not"
-      );
-    }
   }
 
   function renderRepoTable(git) {
@@ -347,7 +332,7 @@ DASHBOARD_JS = """
     return typeof value === "number" && !isNaN(value) ? String(value) : "—";
   }
 
-  // ---- durum --json kaynakları (atlas / orkestra / harita) -------------
+  // ---- durum --json kaynakları (atlas / orkestra) -------------
   //
   // Sözleşme "bilinmeyen için null (0 DEĞİL)" diyor. Backend de int olmayan
   // sayıyı null'a çeviriyor, ama arada bir yerde `|| 0` yazmak sessizce
@@ -399,18 +384,6 @@ DASHBOARD_JS = """
     setCountText("orkestra-kanitsiz", orkestra.kanitsiz_ya_da_supheli);
     renderKv(qs("orkestra-gorev-durum-kv"), orkestra.gorev_durum);
     renderKv(qs("orkestra-kota-kv"), orkestra.kota);
-  }
-
-  function renderHarita(harita) {
-    harita = isPlainObject(harita) ? harita : {};
-    var reachable = harita.reachable === true;
-    setBadge(qs("harita-badge"), reachable ? "ok" : "bad", reachable ? "okundu" : "erişilemiyor");
-    setText("harita-error", harita.error ? String(harita.error) : "");
-    setCountText("harita-not-sayisi", harita.not_sayisi);
-    setCountText("harita-kirik-link", harita.kirik_link);
-    setCountText("harita-yetim-not", harita.yetim_not);
-    setCountText("harita-tutarlilik-uyari", harita.tutarlilik_uyari);
-    setText("harita-son-indeks", harita.son_indeks ? fmtDate(harita.son_indeks) : UNKNOWN);
   }
 
   function renderCor(cor) {
@@ -604,17 +577,14 @@ DASHBOARD_JS = """
     // durum --json kaynakları: notifier'ın DAR koşullarıyla AYNI ciddiyet.
     // Panel "dikkat" derken Telegram susuyorsa (ya da tersi) iki yüz birbirini
     // düzeltmiyormuş gibi görünür — o yüzden eşikler burada da birebir aynı:
-    // erişilememe = sorun; veri/indeks bayatı ve onay bekleyen = dikkat. Sürekli >0 olan `bayat_readme`/`kırık link`
+    // erişilememe = sorun; veri bayatı ve onay bekleyen = dikkat. Sürekli >0 olan `bayat_readme`/`kırık link`
     // sayıları kasıtlı olarak topbar'ı etkilemez (spam olmasın diye).
     var atlas = isPlainObject(data.atlas) ? data.atlas : {};
     var ork = isPlainObject(data.orkestra) ? data.orkestra : {};
-    var harita = isPlainObject(data.harita) ? data.harita : {};
-    var durumBroken =
-      atlas.reachable !== true || ork.reachable !== true || harita.reachable !== true;
+    var durumBroken = atlas.reachable !== true || ork.reachable !== true;
     var durumBad =
       durumBroken;
-    var durumWarn = (ork.onay_bekleyen || 0) > 0 || harita.indeks_bayat === true
-      || atlas.veri_bayat === true;
+    var durumWarn = (ork.onay_bekleyen || 0) > 0 || atlas.veri_bayat === true;
 
     var level = "ok";
     if (anyRepoError || !cor.reachable || !bs.reachable || !rb.reachable || vault.error || maintenanceFailed || durumBad) {
@@ -643,7 +613,6 @@ DASHBOARD_JS = """
     renderVault(data.vault);
     renderAtlas(data.atlas);
     renderOrkestra(data.orkestra);
-    renderHarita(data.harita);
     renderMaintenance(data.maintenance);
     renderOverallStatus(data);
     var updatedEl = qs("updated-at");

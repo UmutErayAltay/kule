@@ -22,9 +22,9 @@ maintenance:                    # Dalga F — hepsi OPSİYONEL, eksikse default 
   process_names: [ollama, uvicorn, node]   # izlenecek süreç adı kalıpları
   # disk_paths: []              # boşsa repo_roots, o da boşsa "/" kontrol edilir
 
-# --- durum --json kaynakları (atlas / orkestra / harita) ---
+# --- durum --json kaynakları (atlas / orkestra) ---
 #
-# Üç blok da TAMAMEN OPSİYONEL: eksik ya da bozuk tipli olsa bile panel
+# İki blok da TAMAMEN OPSİYONEL: eksik ya da bozuk tipli olsa bile panel
 # düşmez, o kaynağın kartı sabit bir hata koduyla "erişilemiyor" der.
 # Kule bu araçları alt süreç olarak çağırır (`<komut> durum --json`),
 # ağa çıkmaz, hiçbir şeyi değiştirmez — yalnızca SAYILARI okur.
@@ -44,10 +44,9 @@ orkestra:
   komut: ["orkestra"]
   zaman_asimi: 15
 
-harita:
-  komut: ["harita"]
-  # vault: "~/Mt3Ui55OS"      # OPSİYONEL — verilmezse harita kendi
-                               # varsayılan çözümlemesini kullanır
+# harita: panelden KALDIRILDI (kırık link/yetim için vault kartı kullanılır,
+# yetim tanımı harita'yla aynıdır). `app/collectors/harita_status.py` duruyor;
+# yeniden açmak için `app/aggregator.py`'ye tek satır + panel kartı gerekir.
 
 telegram:
   bot_token: ""   # boş bırak, env'den de okunabilir: KULE_TELEGRAM_BOT_TOKEN

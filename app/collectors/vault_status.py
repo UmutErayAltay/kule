@@ -6,6 +6,16 @@ o repo'ya import ile bağımlı olmamalı).
 Görev gereği yalnızca SAYILAR döner, kırık linklerin/yetim notların tam
 listesi değil — panel için liste gerekmiyor ve büyük vault'larda gereksiz
 büyür.
+
+Yetim tanımı harita'nın "gerçek yetim"iyle AYNIDIR (kule harita'yı import
+etmez, kural burada bağımsız yazıldı; değişirse ikisi birlikte değişmeli):
+bir not "yetim"dir ancak (1) ne bir link ALIYORSA ne de link VERİYORSA ve
+(2) yapısal olarak yalnız kalmıyorsa. Yapısal yalnızlar sayılmaz:
+vault kökündeki `.md` dosyaları (README, AUDIT_REPORT...) ve `daily/`
+günlükleri — makine her oturumda günlük yazdığı için bunlar yüzlerce
+"yetim" üretip sayıyı anlamsız kılıyordu. Aynı sebeple harita'nın varsayılan
+dışlamaları (`.obsidian`, `receipts`, `.git`, `.claude`, `.agents`,
+`node_modules`, `📥 000-Inbox/Dump`) hem kırık link hem yetim sayımına GİRMEZ.
 """
 from __future__ import annotations
 
@@ -14,6 +24,22 @@ from pathlib import Path
 
 STATUS_LINE = re.compile(r"\*\*Status:\*\*\s*([^\s]+)")
 CLOSED_MARKERS = {"✅"}
+
+# Sayıma girmeyen klasörler (vault köküne göreli; çok bileşenli kural tam
+# diziyi, tek bileşenli kural ağacın her derinliğini eşler). harita'nın
+# `VARSAYILAN_HARIC_TUTULANLAR` listesiyle aynı.
+EXCLUDED_PATHS: tuple[tuple[str, ...], ...] = (
+    (".obsidian",),
+    ("receipts",),
+    (".git",),
+    ("📥 000-Inbox", "Dump"),
+    (".claude",),
+    (".agents",),
+    ("node_modules",),
+)
+# Yapısal olarak yalnız kalan notlar: kökteki `.md` dosyaları ve bu
+# klasörlerin altındakiler yetim SAYILMAZ (kırık linkleri yine sayılır).
+STRUCTURAL_DIRS = ("daily",)
 
 
 def _extract_wikilinks(text: str) -> list[str]:
@@ -51,25 +77,52 @@ def _extract_wikilinks(text: str) -> list[str]:
     return links
 
 
-def _count_broken_links_and_orphans(vault_path: Path) -> tuple[int, int]:
-    md_files = [p for p in vault_path.rglob("*.md") if p.is_file()]
-    known = {p.stem for p in md_files}
+def _is_excluded(parts: tuple[str, ...]) -> bool:
+    for rule in EXCLUDED_PATHS:
+        for start in range(len(parts) - len(rule) + 1):
+            if parts[start:start + len(rule)] == rule:
+                return True
+    return False
 
-    referenced: set[str] = set()
-    broken_count = 0
-    for p in md_files:
+
+def _is_structurally_alone(parts: tuple[str, ...]) -> bool:
+    """Kökteki tek-bileşenli `.md` ya da `daily/` altındaki not mu?"""
+    if len(parts) == 1:
+        return parts[0].lower().endswith(".md")
+    return parts[0] in STRUCTURAL_DIRS
+
+
+def _count_broken_links_and_orphans(vault_path: Path) -> tuple[int, int]:
+    notes: list[tuple[tuple[str, ...], str, list[str]]] = []
+    for p in vault_path.rglob("*.md"):
+        if not p.is_file():
+            continue
+        parts = p.relative_to(vault_path).parts
+        if _is_excluded(parts):
+            continue
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
-        links = _extract_wikilinks(text)
+        notes.append((parts, p.stem, _extract_wikilinks(text)))
+
+    known = {stem for _, stem, _ in notes}
+    referenced: set[str] = set()
+    broken_count = 0
+    for _, _, links in notes:
         for link in links:
             if link in known:
                 referenced.add(link)
             else:
                 broken_count += 1
 
-    orphan_count = len(known - referenced)
+    # Gerçek yetim: link ALMIYOR (kimse ona bağlanmıyor) ve link VERMİYOR
+    # (kırık de olsa hiç wikilink'i yok) ve yapısal olarak yalnız değil.
+    orphan_count = sum(
+        1
+        for parts, stem, links in notes
+        if stem not in referenced and not links and not _is_structurally_alone(parts)
+    )
     return broken_count, orphan_count
 
 

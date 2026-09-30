@@ -9,9 +9,9 @@ yapmak" için gereken özet bilgidir.
 kule: Umut'un projelerinin durumunu tek panelde toplayan kontrol
 kulesi. Git repo durumları, cor (claude-openrouter) proxy sağlığı,
 BorsaSite pipeline'ı, readbunny DB'si, Mt3Ui55OS vault hijyeni,
-atlas/orkestra/harita durum sayıları ve otomatik bakım uyarılarını tek
+atlas/orkestra durum sayıları ve otomatik bakım uyarılarını tek
 bir FastAPI panelinde birleştirir. kule kendi başına veri üretmez —
-dokuz ayrı dış kaynağa (dosya sistemi/HTTP/Postgres/süreç listesi/alt
+sekiz ayrı dış kaynağa (dosya sistemi/HTTP/Postgres/süreç listesi/alt
 süreç) bağlanıp okur, biri çökerse yalnızca o kartı "erişilemiyor"
 gösterir.
 
@@ -45,12 +45,12 @@ app/
     cor_status.py       # cor'un /healthz, /dashboard/api/health, /dashboard/api/metrics-summary uçları
     borsasite_status.py # HTTP health + opsiyonel Postgres (trade_decisions/predictions)
     readbunny_status.py # Postgres links tablosundan özet (reachable/last_updated/error/pending/total)
-    vault_status.py     # Mt3Ui55OS vault'unu okur: kırık wikilink, yetim not, açık Threads.md hikaye sayısı
+    vault_status.py     # Mt3Ui55OS vault'unu okur: kırık wikilink, GERÇEK yetim (ne alan ne veren; kök .md ve daily/ hariç), açık Threads.md hikaye sayısı
     maintenance_status.py # Dalga F: disk doluluğu + unutulmuş süreçler + eski kirli repo (SADECE raporlar)
     durum_status.py     # `durum --json` sözleşmesinin ORTAK koşucusu (subprocess + çıktı doğrulama)
     atlas_status.py     # `atlas durum --json` -> repo/bulgu/todo sayıları
     orkestra_status.py  # `orkestra durum --json` -> görev/onay/kota sayıları
-    harita_status.py    # `harita durum --json` -> indeks/not/kırık link sayıları
+    harita_status.py    # `harita durum --json` — modül duruyor ama aggregator'a KAYITLI DEĞİL (panelde kartı yok, vault kartı yeterli)
   main.py              # FastAPI app — GET / (panel HTML), GET /api/summary (aggregator JSON)
   web/
     page.py             # render_dashboard_html() — statik HTML iskelet (veri içermez)
@@ -116,7 +116,7 @@ istekte 500 + "ne yapman gerektiğini" söyleyen bir mesaj döner.
    bölümlerden oluşan dict) ve `build_alert_message` içinde
    `MAINTENANCE_KEY` eşleşmesiyle ayrı bir yola (`_maintenance_sentences`)
    yönlendirilir; kaynak kotasına (`MAX_LISTED_SOURCES`) girmez.
-   `atlas`/`orkestra`/`harita` ise BEŞİNCİ yoldur: erişilemezlikleri
+   `atlas`/`orkestra` (ve kayıtlı olursa `harita`) ise BEŞİNCİ yoldur: erişilemezlikleri
    `_describe`'ın mevcut dalına uyar (`{"reachable": False, "error":
    <sabit kod>}`), ama `reachable: True` iken sayı alanlarındaki uyarıları
    `_durum_sentences` üretir ve `DURUM_SOURCES` eşleşmesiyle yönlendirilir.

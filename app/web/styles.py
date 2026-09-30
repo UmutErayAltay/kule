@@ -145,7 +145,7 @@ section.block {
 
 /* ---- stat grid ---- */
 
-/* Dokuz kaynak (atlas/orkestra/harita eklendi) tek sıraya sığmıyor: 6
+/* Sekiz kaynak (atlas/orkestra eklendi) tek sıraya sığmıyor: 6
    kolonda "ULAŞILAMIYOR" gibi uzun bir değer 24px mono ile taşıyordu.
    Geniş ekranda 3 kolon (üç satır) — her kutunun genişliği korunur,
    tipografi değişmez. */

@@ -289,9 +289,9 @@ def test_stylesheet_has_sixth_stat_tile_capacity(dashboard_html):
     assert ".card-wide" in styles_module.DASHBOARD_CSS
 
 
-# --- dalga G: atlas / orkestra / harita kartları -------------------------
+# --- dalga G: atlas / orkestra kartları ----------------------------------
 #
-# Aynı sözleşme, yeni üç kaynak için: `page.py`'daki her DOM id
+# Aynı sözleşme, yeni iki kaynak için (harita kartı kaldırıldı): `page.py`'daki her DOM id
 # `script.py`'da karşılık gelen bir `qs()`/`setText()`/`setStatTile()`
 # çağrısına sahip olmalı ve tersi de doğru (JS'te olan ama HTML'de olmayan
 # id de sessizce hiçbir işe yaramaz).
@@ -316,16 +316,10 @@ DURUM_DOM_IDS = [
     "orkestra-onay-bekleyen",
     "orkestra-basarisiz",
     "orkestra-kanitsiz",
-    "harita-badge",
-    "harita-error",
-    "harita-not-sayisi",
-    "harita-kirik-link",
-    "harita-yetim-not",
-    "harita-tutarlilik-uyari",
-    "harita-son-indeks",
+
 ]
 
-DURUM_STAT_TILE_PREFIXES = ["stat-atlas", "stat-orkestra", "stat-harita"]
+DURUM_STAT_TILE_PREFIXES = ["stat-atlas", "stat-orkestra"]
 
 
 @pytest.mark.parametrize("dom_id", DURUM_DOM_IDS)
@@ -354,7 +348,6 @@ def test_durum_cards_are_called_from_render_entrypoint():
     for cagri in (
         "renderAtlas(data.atlas);",
         "renderOrkestra(data.orkestra);",
-        "renderHarita(data.harita);",
     ):
         assert cagri in render_body, f"{cagri} render() gövdesinde yok"
 
@@ -366,29 +359,35 @@ def test_durum_cards_are_present_alongside_existing_cards(dashboard_html):
         "BorsaSite",
         "readbunny",
         "vault (Mt3Ui55OS)",
-        "harita (vault)",
         "bakım (raporlar, müdahale etmez)",
     ):
         assert heading in dashboard_html
+    # kaldırılan harita kartı hiçbir iz bırakmamalı (sessizce boş kalan id yok)
+    # ("harita" Türkçe'de "map" de demek: yorumlardaki `gorev_durum haritaları`
+    # kalıntı değil, bu yüzden yalnızca kartın kimliklerini/çağrılarını ararız.)
+    for kalinti in ("harita-", "stat-harita", "renderHarita", "data.harita", "harita (vault)"):
+        assert kalinti not in dashboard_html, f"{kalinti} HTML'de kaldı"
+        assert kalinti not in script_module.DASHBOARD_JS, f"{kalinti} JS'te kaldı"
     # yeni kart etiketleri
     assert ">atlas<" in dashboard_html.replace(" ", "")
     assert ">orkestra<" in dashboard_html.replace(" ", "")
 
 
 def test_durum_json_shape_is_documented_in_page_docstring():
-    """page.py docstring'i `/api/summary` şeklini belgeliyor; üç yeni alan
-    da orada geçmeli."""
-    for anahtar in ('"atlas"', '"orkestra"', '"harita"'):
+    """page.py docstring'i `/api/summary` şeklini belgeliyor; yeni alanlar
+    da orada geçmeli, kaldırılan harita geçmemeli."""
+    for anahtar in ('"atlas"', '"orkestra"'):
         assert anahtar in page_module.__doc__
+    assert '"harita"' not in page_module.__doc__
 
 
 def test_durum_stat_tiles_fit_the_grid(dashboard_html):
-    """Dokuz kutu üç kolonlu ızgarada üç satır olur — CSS'te altı kutunun
+    """Sekiz kutu üç kolonlu ızgarada 3+3+2 olur — CSS'te altı kutunun
     ızgarası kalmamalı, `.card-wide` yeni geniş kartlar için de var."""
     assert "repeat(3, 1fr)" in styles_module.DASHBOARD_CSS
     assert ".card-wide" in styles_module.DASHBOARD_CSS
-    # dokuz stat-tile gerçekten var mı
-    assert dashboard_html.count('class="stat-tile"') == 9
+    # sekiz stat-tile gerçekten var mı
+    assert dashboard_html.count('class="stat-tile"') == 8
 
 
 def test_unknown_counts_render_as_bilinmiyor_not_zero():

@@ -176,17 +176,18 @@ def test_get_cached_summary_uses_default_ttl_constant(monkeypatch):
     assert aggregator.CACHE_TTL_SECONDS == 60
 
 
-# --- dalga G: atlas / orkestra / harita ---------------------------------
+# --- dalga G: atlas / orkestra ------------------------------------------
 #
-# `collect_all` artık DOKUZ kaynağı birleştiriyor. Yeni collector'ların
+# `collect_all` artık SEKİZ kaynağı birleştiriyor (harita kartı panelden
+# çıkarıldı; `harita_status` modülü duruyor ama aggregator'a KAYITLI DEĞİL,
+# bkz. `test_harita_is_not_registered_in_aggregator`). Yeni collector'ların
 # kaydı elle yapıldığı için (CLAUDE.md madde 2) burada iki şey kilitleniyor:
-# (1) üç anahtar da çıktıda bulunuyor, (2) biri patladığında diğer sekiz
-# kaynak ETKİLENMİYOR.
+# (1) anahtarlar çıktıda bulunuyor, (2) biri patladığında diğerleri
+# ETKİLENMİYOR.
 
 DURUM_GEZERLI = {
     "atlas": {"reachable": True, "bulgu_toplam": 5, "veri_bayat": False},
     "orkestra": {"reachable": True, "gorev_toplam": 14, "onay_bekleyen": 0, "basarisiz": 0},
-    "harita": {"reachable": True, "not_sayisi": 1234, "indeks_bayat": False},
 }
 
 # Modül adı -> sonuç anahtarı. `jobs` dict'i MODÜL adıyla değil kaynak
@@ -195,12 +196,11 @@ DURUM_GEZERLI = {
 DURUM_MODULLERI = {
     "atlas": "atlas_status",
     "orkestra": "orkestra_status",
-    "harita": "harita_status",
 }
 
 
 def _patch_durum(monkeypatch, **patlayan_kaynaklar):
-    """Üç yeni collector'ı sahte `collect` fonksiyonlarıyla değiştirir.
+    """İki yeni collector'ı sahte `collect` fonksiyonlarıyla değiştirir.
 
     `patlayan_kaynaklar` içinde geçen KAYNAK adının collector'ı patlatır
     (izolasyon testi).
@@ -217,9 +217,9 @@ def _patch_durum(monkeypatch, **patlayan_kaynaklar):
             monkeypatch.setattr(modul, "collect", lambda cfg, _d=deger: dict(_d))
 
 
-def test_collect_all_registers_nine_sources(monkeypatch):
-    """Dokuz anahtar: altı eski + atlas/orkestra/harita. Bir anahtar
-    unutulursa ya da yanlış yazılırsa burada yakalanır."""
+def test_collect_all_registers_eight_sources(monkeypatch):
+    """Sekiz anahtar: altı eski + atlas/orkestra. Bir anahtar unutulursa
+    ya da yanlış yazılırsa burada yakalanır."""
     _patch_all_collectors(monkeypatch)
     _patch_durum(monkeypatch)
 
@@ -234,10 +234,27 @@ def test_collect_all_registers_nine_sources(monkeypatch):
         "maintenance",
         "atlas",
         "orkestra",
-        "harita",
         "collected_at",
     }
     assert set(result) == beklenen
+
+
+def test_harita_is_not_registered_in_aggregator(monkeypatch):
+    """Harita kartı kaldırıldı (vault kartı tek kaynak): `collect_all` harita
+    alt sürecini HİÇ başlatmamalı. Modül duruyor, yeniden eklemek için
+    aggregator'a tek satır yeter."""
+    _patch_all_collectors(monkeypatch)
+    _patch_durum(monkeypatch)
+    from app.collectors import harita_status
+
+    def cagrilmamali(cfg):
+        raise AssertionError("harita_status.collect çağrıldı")
+
+    monkeypatch.setattr(harita_status, "collect", cagrilmamali)
+
+    result = aggregator.collect_all({})
+
+    assert "harita" not in result
 
 
 def test_collect_all_merges_durum_sources(monkeypatch):
@@ -248,13 +265,12 @@ def test_collect_all_merges_durum_sources(monkeypatch):
 
     assert result["atlas"] == DURUM_GEZERLI["atlas"]
     assert result["orkestra"] == DURUM_GEZERLI["orkestra"]
-    assert result["harita"] == DURUM_GEZERLI["harita"]
 
 
 @pytest.mark.parametrize("patlayan", list(DURUM_MODULLERI))
 def test_collect_all_isolates_failing_durum_collector(monkeypatch, patlayan):
     """Yeni collector'lardan biri patladığında o anahtar `{"error": ...}`
-    olur, DİĞER SEKİZ kaynak etkilenmez."""
+    olur, DİĞER kaynaklar etkilenmez."""
     _patch_all_collectors(monkeypatch, cor={"reachable": True}, vault={"broken_link_count": 0})
     _patch_durum(monkeypatch, **{patlayan: True})
 
@@ -273,10 +289,10 @@ def test_collect_all_isolates_failing_durum_collector(monkeypatch, patlayan):
             assert result[kaynak] == DURUM_GEZERLI[kaynak]
 
 
-def test_collect_all_isolates_all_three_durum_collectors_failing(monkeypatch):
-    """Üçü birden patlasa bile altı eski kaynak sağlam kalır."""
+def test_collect_all_isolates_all_durum_collectors_failing(monkeypatch):
+    """İkisi birden patlasa bile altı eski kaynak sağlam kalır."""
     _patch_all_collectors(monkeypatch, cor={"reachable": True})
-    _patch_durum(monkeypatch, atlas=True, orkestra=True, harita=True)
+    _patch_durum(monkeypatch, atlas=True, orkestra=True)
 
     result = aggregator.collect_all({})
 

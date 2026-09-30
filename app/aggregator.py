@@ -24,7 +24,6 @@ from app.collectors import (
     borsasite_status,
     cor_status,
     git_status,
-    harita_status,
     maintenance_status,
     orkestra_status,
     readbunny_status,
@@ -45,7 +44,7 @@ def _run_isolated(name: str, fn: Callable[[dict], Any], config: dict) -> Any:
 
 
 def collect_all(config: dict) -> dict:
-    """Dokuz collector'ı paralel çağırır, her birini izole eder. Cache YOK —
+    """Sekiz collector'ı paralel çağırır, her birini izole eder. Cache YOK —
     her çağrıda gerçekten tetiklenir; cache isteyen get_cached_summary kullanır.
     """
     jobs: dict[str, tuple[Callable[[dict], Any], dict]] = {
@@ -57,7 +56,6 @@ def collect_all(config: dict) -> dict:
         "maintenance": (maintenance_status.collect, config),
         "atlas": (atlas_status.collect, config),
         "orkestra": (orkestra_status.collect, config),
-        "harita": (harita_status.collect, config),
     }
 
     results: dict[str, Any] = {}
