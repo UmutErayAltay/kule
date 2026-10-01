@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,7 +32,15 @@ def izole_state(tmp_path, monkeypatch):
     """Pid kayıt dosyasını tmp'ye al — gerçek `~/.kule`ye dokunma."""
     state_file = tmp_path / "kule" / "launched.json"
     monkeypatch.setattr(launcher, "STATE_FILE", state_file)
-    return state_file
+    # Modül düzeyindeki bellek içi durum testler arasında sızmasın.
+    launcher._son_dokunus.clear()
+    launcher._cerceveli.clear()
+    launcher._kendi_pidlerimiz.clear()
+    yield state_file
+    launcher.stop_reaper()
+    launcher._son_dokunus.clear()
+    launcher._cerceveli.clear()
+    launcher._kendi_pidlerimiz.clear()
 
 
 @pytest.fixture
@@ -518,3 +528,339 @@ def test_html_araclar_bolumu_ve_uc_araç_adı(client, temiz_config):
         assert f'tool-start-{ad}' in html
         assert f'tool-stop-{ad}' in html
         assert f'tool-restart-{ad}' in html
+
+
+# ------------------------------------------------------------------ frame_origin
+
+
+def test_start_frame_origin_gecerli_env_eklenir(config, canli_surecler, monkeypatch):
+    """frame_origin kalıba uyuyorsa Popen env'ine KULE_FRAME_ORIGIN eklenir."""
+    captured_env = {}
+
+    def fake_popen(argv, **kwargs):
+        captured_env.update(kwargs.get("env", {}))
+        return canli_surecler[1][0]  # ilk çağrı için sahte süreç
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    launcher.start("atlas", config, frame_origin="http://127.0.0.1:8790")
+
+    assert "KULE_FRAME_ORIGIN" in captured_env
+    assert captured_env["KULE_FRAME_ORIGIN"] == "http://127.0.0.1:8790"
+    # Telegram anahtarları yine çıkmalı
+    assert not any(k.startswith("KULE_TELEGRAM_") for k in captured_env)
+
+
+def test_start_frame_origin_gecersiz_env_eklenmez(config, canli_surecler, monkeypatch):
+    """frame_origin kalıba UYMUYORSA env'e HİÇ eklenmez."""
+    captured_env = {}
+
+    def fake_popen(argv, **kwargs):
+        captured_env.update(kwargs.get("env", {}))
+        return canli_surecler[1][0]
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    # https -> reddedilir
+    launcher.start("atlas", config, frame_origin="https://127.0.0.1:8790")
+    assert "KULE_FRAME_ORIGIN" not in captured_env
+
+    # farklı host -> reddedilir
+    captured_env.clear()
+    launcher.start("atlas", config, frame_origin="http://192.168.1.5:8790")
+    assert "KULE_FRAME_ORIGIN" not in captured_env
+
+    # port yok -> reddedilir
+    captured_env.clear()
+    launcher.start("atlas", config, frame_origin="http://127.0.0.1")
+    assert "KULE_FRAME_ORIGIN" not in captured_env
+
+    # yol içeren -> reddedilir
+    captured_env.clear()
+    launcher.start("atlas", config, frame_origin="http://127.0.0.1:8790/path")
+    assert "KULE_FRAME_ORIGIN" not in captured_env
+
+    # None -> eklenmez
+    captured_env.clear()
+    launcher.start("atlas", config, frame_origin=None)
+    assert "KULE_FRAME_ORIGIN" not in captured_env
+
+
+def test_start_parent_ortaminda_KULE_FRAME_ORIGIN_varsa_cocuga_gecmez(
+    config, canli_surecler, monkeypatch
+):
+    """Parent ortamında KULE_FRAME_ORIGIN varsa o da çocuğa geçmemeli."""
+    import os
+
+    monkeypatch.setenv("KULE_FRAME_ORIGIN", "http://evil.com")
+    captured_env = {}
+
+    def fake_popen(argv, **kwargs):
+        captured_env.update(kwargs.get("env", {}))
+        return canli_surecler[1][0]
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    launcher.start("atlas", config, frame_origin=None)
+
+    assert "KULE_FRAME_ORIGIN" not in captured_env
+
+
+def test_status_cerceve_alani_dogru(config, canli_surecler):
+    """status_of sonucunda 'cerceve' alanı doğru: origin alıp çalışıyorsa True."""
+    # Henüz başlatılmamış -> cerceve False
+    durum = launcher.status_of("atlas", config)
+    assert durum["cerceve"] is False
+
+    # frame_origin ile başlat -> cerceve True
+    launcher.start("atlas", config, frame_origin="http://127.0.0.1:8790")
+    durum = launcher.status_of("atlas", config)
+    assert durum["cerceve"] is True
+
+    # Stop -> cerceve False
+    launcher.stop("atlas", config)
+    durum = launcher.status_of("atlas", config)
+    assert durum["cerceve"] is False
+
+
+# ------------------------------------------------------------------ touch
+
+
+def test_touch_kendi_baslattigi_arac_kaydi_gunceller(config, canli_surecler, monkeypatch):
+    """touch() kendi başlattığı aracın son dokunuş zamanını yazar."""
+    launcher.start("atlas", config)
+    once = launcher._son_dokunus.get("atlas")
+    assert once is not None
+
+    time.sleep(0.01)
+    launcher.touch("atlas")
+    sonra = launcher._son_dokunus.get("atlas")
+    assert sonra > once
+
+
+def test_touch_baska_surec_veya_baslatilmamis_noop(config, canli_surecler):
+    """Başka süreçten açılmış veya başlatılmamış araca touch no-op."""
+    # Başlatılmamış
+    launcher.touch("atlas")
+    assert "atlas" not in launcher._son_dokunus
+
+    # Başlat
+    launcher.start("atlas", config)
+
+    # _kendi_pidlerimiz'den çıkar -> Elle açılmış gibi
+    pid = launcher._read_state().get("atlas")
+    launcher._kendi_pidlerimiz.discard(pid)
+
+    once = launcher._son_dokunus.get("atlas")
+    launcher.touch("atlas")
+    # Değişmemeli
+    assert launcher._son_dokunus.get("atlas") == once
+
+
+def test_touch_bilinmeyen_arac_noop(config):
+    """Bilinmeyen araç adı sessizce no-op."""
+    launcher.touch("olmayan")  # exception fırlatmamalı
+    assert "olmayan" not in launcher._son_dokunus
+
+
+def test_api_tool_touch_200(client, temiz_config, canli_surecler, izole_state):
+    """POST /api/tools/{ad}/touch -> 200 + {'ok': true}."""
+    # Önce başlat
+    client.post("/api/tools/atlas/start")
+
+    resp = client.post("/api/tools/atlas/touch")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_api_tool_touch_bilinmeyen_404(client, temiz_config):
+    """Bilinmeyen araç -> 404."""
+    resp = client.post("/api/tools/olmayan/touch")
+    assert resp.status_code == 404
+    assert resp.json()["gecerli"] == sorted(TOOL_ADLARI)
+
+
+def test_api_tool_touch_config_yok_500(client, monkeypatch):
+    """Config yok -> 500 + CONFIG_HELP."""
+    monkeypatch.setattr(main_module, "_config", None)
+    monkeypatch.setattr(main_module, "_config_error", "config.yaml bulunamadı")
+
+    resp = client.post("/api/tools/atlas/touch")
+    assert resp.status_code == 500
+    assert resp.json()["error"] == main_module.CONFIG_HELP
+
+
+# ------------------------------------------------------------------ reap_idle / idle_minutes / reaper
+
+
+def test_reap_idle_sure_dolmadi_kapatmaz(config, canli_surecler):
+    """Süre dolmadı -> kapatma."""
+    launcher.start("atlas", config)
+    kapatilan = launcher.reap_idle(config, idle_minutes=15, simdi=time.monotonic())
+    assert kapatilan == []
+
+
+def test_reap_idle_sure_doldu_kapatir(config, canli_surecler):
+    """Süre doldu -> stop çağırır."""
+    launcher.start("atlas", config)
+    simdi = time.monotonic() + 16 * 60  # 16 dakika sonra
+    kapatilan = launcher.reap_idle(config, idle_minutes=15, simdi=simdi)
+    assert "atlas" in kapatilan
+
+
+def test_reap_idle_idle_minutes_sifir_kapatmaz(config, canli_surecler):
+    """idle_minutes=0 -> kapatma (kapalı)."""
+    launcher.start("atlas", config)
+    simdi = time.monotonic() + 100 * 60
+    kapatilan = launcher.reap_idle(config, idle_minutes=0, simdi=simdi)
+    assert kapatilan == []
+
+
+def test_reap_idle_kendi_pidlerimiz_disinda_dokunmaz(config, canli_surecler, izole_state):
+    """Elle/başka süreçten açılmış (kendi_pidlerimiz dışı) araca dokunma."""
+    # Elle state'e pid yaz
+    izole_state.parent.mkdir(parents=True, exist_ok=True)
+    izole_state.write_text(json.dumps({"atlas": 9999}), encoding="utf-8")
+    # _kendi_pidlerimiz boş
+    launcher._kendi_pidlerimiz.clear()
+    launcher._son_dokunus["atlas"] = time.monotonic() - 100 * 60
+
+    simdi = time.monotonic()
+    kapatilan = launcher.reap_idle(config, idle_minutes=15, simdi=simdi)
+    assert kapatilan == []
+
+
+def test_reap_idle_orkestra_mesgul_kapatmaz(config, canli_surecler, monkeypatch):
+    """orkestra meşgul -> kapatma."""
+    launcher.start("orkestra", config)
+
+    def mesgul(_cfg):
+        return True
+
+    simdi = time.monotonic() + 16 * 60
+    kapatilan = launcher.reap_idle(config, idle_minutes=15, simdi=simdi, orkestra_mesgul=mesgul)
+    assert kapatilan == []
+
+
+def test_reap_idle_orkestra_okunamadi_kapatmaz(config, canli_surecler):
+    """orkestra okunamadı (hata) -> güvenli taraf, kapatma."""
+    launcher.start("orkestra", config)
+
+    def hata(_cfg):
+        raise RuntimeError("okunamadı")
+
+    simdi = time.monotonic() + 16 * 60
+    kapatilan = launcher.reap_idle(config, idle_minutes=15, simdi=simdi, orkestra_mesgul=hata)
+    assert kapatilan == []
+
+
+def test_reap_idle_orkestra_bosta_kapatir(config, canli_surecler, monkeypatch):
+    """orkestra boşta -> kapatır."""
+    launcher.start("orkestra", config)
+
+    def bosta(_cfg):
+        return False
+
+    simdi = time.monotonic() + 16 * 60
+    kapatilan = launcher.reap_idle(config, idle_minutes=15, simdi=simdi, orkestra_mesgul=bosta)
+    assert "orkestra" in kapatilan
+
+
+def test_idle_minutes_varsayilanlar(monkeypatch):
+    """idle_minutes config'ten okunur; bozuksa varsayılan 15."""
+    # Config yok
+    assert launcher.idle_minutes({}) == 15.0
+
+    # araclar blok yok
+    assert launcher.idle_minutes({"baska": 1}) == 15.0
+
+    # bool -> reddedilir (bool int'in alt türü ama sayı DEĞİLDİR)
+    assert launcher.idle_minutes({"araclar": {"bosta_kapat_dakika": True}}) == 15.0
+
+    # negatif -> reddedilir
+    assert launcher.idle_minutes({"araclar": {"bosta_kapat_dakika": -5}}) == 15.0
+
+    # string -> reddedilir
+    assert launcher.idle_minutes({"araclar": {"bosta_kapat_dakika": "15"}}) == 15.0
+
+    # 0 -> 0 (kapalı)
+    assert launcher.idle_minutes({"araclar": {"bosta_kapat_dakika": 0}}) == 0.0
+
+    # geçerli sayı
+    assert launcher.idle_minutes({"araclar": {"bosta_kapat_dakika": 10}}) == 10.0
+    assert launcher.idle_minutes({"araclar": {"bosta_kapat_dakika": 7.5}}) == 7.5
+
+
+def test_start_reaper_hata_atan_loadconfig_olmez(monkeypatch):
+    """start_reaper hata atan load_config_fn ile thread'i öldürmez."""
+    def patlayan():
+        raise RuntimeError("config yüklenemedi")
+
+    thread = launcher.start_reaper(patlayan, kontrol_saniye=0.01)
+    time.sleep(0.05)  # en az bir tur dönsün
+    # Thread hâlâ canlı olmalı
+    assert thread.is_alive()
+    launcher.stop_reaper()
+
+
+def test_stop_reaper_threadi_durdurur(monkeypatch):
+    """stop_reaper thread'ini temiz durdurur."""
+    def config_fn():
+        return {}
+
+    thread = launcher.start_reaper(config_fn, kontrol_saniye=0.01)
+    time.sleep(0.02)
+    launcher.stop_reaper()
+    assert not thread.is_alive()
+    # Tekrar çağrılsa hata vermemeli
+    launcher.stop_reaper()
+
+
+# ------------------------------------------------- çerçeve origin: sınırlar
+
+
+@pytest.fixture
+def env_yakala(canli_surecler, monkeypatch):
+    """`Popen`'a giden env'leri toplar; süreci `canli_surecler` açmış gibi yapar."""
+    gercek_sahte = subprocess.Popen
+    envler: list[dict] = []
+
+    def sarmal(argv, **kwargs):
+        envler.append(dict(kwargs.get("env") or {}))
+        return gercek_sahte(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", sarmal)
+    return envler
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["http://127.0.0.1:8790\n", "http://127.0.0.1:8790 ", "http://127.0.0.1:8790/yol"],
+)
+def test_start_origin_satir_sonu_ve_bosluk_reddedilir(config, env_yakala, origin):
+    """`$` satır sonundan önce de eşleşir; `fullmatch` bunu kapatır."""
+    durum, hata = launcher.start("atlas", config, frame_origin=origin)
+    assert hata is None
+    assert "KULE_FRAME_ORIGIN" not in env_yakala[-1]
+    assert durum["cerceve"] is False
+
+
+def test_start_gecerli_origin_cerceve_true(config, env_yakala):
+    durum, hata = launcher.start("atlas", config, frame_origin="http://localhost:8790")
+    assert hata is None
+    assert env_yakala[-1]["KULE_FRAME_ORIGIN"] == "http://localhost:8790"
+    assert durum["cerceve"] is True
+
+
+def test_start_parent_origin_gecersizken_cocuga_gecmez(config, env_yakala, monkeypatch):
+    monkeypatch.setenv("KULE_FRAME_ORIGIN", "http://127.0.0.1:1111")
+    launcher.start("atlas", config, frame_origin=None)
+    assert "KULE_FRAME_ORIGIN" not in env_yakala[-1]
+
+
+def test_restart_origini_iletir(config, env_yakala):
+    launcher.start("atlas", config, frame_origin=None)
+    durum, hata = launcher.restart("atlas", config, "http://127.0.0.1:8790")
+    assert hata is None
+    assert env_yakala[-1]["KULE_FRAME_ORIGIN"] == "http://127.0.0.1:8790"
+    assert durum["cerceve"] is True

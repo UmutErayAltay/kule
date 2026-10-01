@@ -37,10 +37,12 @@ yönetir ve testlerden doğrudan çağrılabilir.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sysconfig
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -63,8 +65,19 @@ _lock = threading.RLock()
 #: kontrolünü bu süreçler için uygulamaz (bkz. `_pid_alive`).
 _kendi_pidlerimiz: set[int] = set()
 
+#: Bu süreçte frame_origin ile başlatılan araç adları. origin
+#: verilmişse ekler, stop/shutdown/ölümde çıkar.
+_cerceveli: set[str] = set()
+
+#: Son dokunuş zamanları (time.monotonic). touch() ve start() yazar,
+#: stop ve ölü süreç kaydı siler.
+_son_dokunus: dict[str, float] = {}
+
 HEALTH_TIMEOUT = 3.0
 STOP_GRACE_SECONDS = 5.0
+
+# frame_origin kalıbı: sadece http://127.0.0.1:port veya http://localhost:port
+_FRAME_ORIGIN_RE = re.compile(r"^http://(127\.0\.0\.1|localhost):[0-9]{1,5}$")
 
 # ---------------------------------------------------------------- hatalar
 # SABİT cümleler. Alt sürecin ham metni ASLA buraya girmez.
@@ -303,6 +316,7 @@ def status_of(ad: str, config: dict) -> dict[str, Any]:
     with _lock:
         state = _read_state()
         pid = _resolve_pid(state, ad)
+        cerceve = ad in _cerceveli and pid is not None
 
     return {
         "ad": ad,
@@ -313,6 +327,7 @@ def status_of(ad: str, config: dict) -> dict[str, Any]:
         "calisiyor": pid is not None,
         "pid": pid,
         "hazir": _readiness(ad, config),
+        "cerceve": cerceve,
     }
 
 
@@ -324,12 +339,21 @@ def list_status(config: dict) -> list[dict[str, Any]]:
 # ------------------------------------------------------- start / stop
 
 
-def start(ad: str, config: dict) -> tuple[dict[str, Any] | None, str | None]:
+def start(
+    ad: str, config: dict, frame_origin: str | None = None
+) -> tuple[dict[str, Any] | None, str | None]:
     """Aracı başlatır. `(durum, hata)` döner; hata varsa durum None.
 
     İdempotent: zaten çalışıyorsa YENİ SÜREÇ AÇMAZ, mevcut durumu
     döner. Eksik exe'yi sessizce geçmez — kullanıcıya ne yapması
     gerektiğini söyleyen sabit bir mesajla 400 döner.
+
+    frame_origin verilmişse ve `^http://(127\.0\.0\.1|localhost):[0-9]{1,5}$`
+    kalıbına TAM uyuyorsa alt sürecin env'ine `KULE_FRAME_ORIGIN=<o değer>`
+    eklenir (env, mevcut `durum_status._child_env()` sonucunun kopyası üzerine;
+    Telegram anahtarları yine çıkarılmış kalmalı). Aksi hâlde env'e HİÇ
+    eklenmez (ve parent ortamında KULE_FRAME_ORIGIN varsa o da çocuğa
+    geçmemeli: çıkar).
     """
     if ad not in TOOLS:
         return None, ERR_AD_YOK
@@ -342,6 +366,17 @@ def start(ad: str, config: dict) -> tuple[dict[str, Any] | None, str | None]:
         argv = tool_command(ad, config)
         if not argv:
             return None, f"{ad}.exe {ERR_EXE_YOK}"
+
+        # frame_origin doğrula ve env hazırla. Parent ortamındaki bir
+        # KULE_FRAME_ORIGIN çocuğa GEÇMEZ: yalnız burada doğrulananı veririz.
+        env = dict(durum_status._child_env())
+        env.pop("KULE_FRAME_ORIGIN", None)
+        cerceve_ok = isinstance(frame_origin, str) and bool(
+            _FRAME_ORIGIN_RE.fullmatch(frame_origin)
+        )
+        if cerceve_ok:
+            env["KULE_FRAME_ORIGIN"] = frame_origin
+
         try:
             proc = subprocess.Popen(
                 argv,
@@ -349,7 +384,7 @@ def start(ad: str, config: dict) -> tuple[dict[str, Any] | None, str | None]:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                env=durum_status._child_env(),
+                env=env,
                 creationflags=_DETACH_FLAGS,
             )
         except Exception:
@@ -358,6 +393,11 @@ def start(ad: str, config: dict) -> tuple[dict[str, Any] | None, str | None]:
         state[ad] = proc.pid
         _write_state(state)
         _kendi_pidlerimiz.add(proc.pid)
+        if cerceve_ok:
+            _cerceveli.add(ad)
+        else:
+            _cerceveli.discard(ad)
+        _son_dokunus[ad] = time.monotonic()
         return status_of(ad, config), None
 
 
@@ -401,15 +441,19 @@ def stop(ad: str, config: dict) -> tuple[dict[str, Any] | None, str | None]:
             state.pop(ad, None)
             _kendi_pidlerimiz.discard(pid)
             _write_state(state)
+        _cerceveli.discard(ad)
+        _son_dokunus.pop(ad, None)
         return status_of(ad, config), None
 
 
-def restart(ad: str, config: dict) -> tuple[dict[str, Any] | None, str | None]:
+def restart(
+    ad: str, config: dict, frame_origin: str | None = None
+) -> tuple[dict[str, Any] | None, str | None]:
     """Durdur + başlat. Durdurma hata verirse başlatma denenmez."""
     _, hata = stop(ad, config)
     if hata is not None:
         return None, hata
-    return start(ad, config)
+    return start(ad, config, frame_origin)
 
 
 def shutdown() -> None:
@@ -435,5 +479,174 @@ def shutdown() -> None:
                     _terminate(pid)
             _write_state({})
             _kendi_pidlerimiz.clear()
+            _cerceveli.clear()
+            _son_dokunus.clear()
     except Exception:
         pass
+
+
+def touch(ad: str) -> None:
+    """Aracın son dokunuş zamanını günceller.
+
+    Kullanılmayan araçları `reap_idle` ile kapatmak için kullanılır.
+    Aracı bu süreçte başlatmadık (_kendi_pidlerimiz içinde yoksa) sessizce
+    no-op yapar.
+    """
+    if ad not in TOOLS:
+        return
+    with _lock:
+        state = _read_state()
+        pid = state.get(ad)
+        if pid is not None and pid in _kendi_pidlerimiz:
+            _son_dokunus[ad] = time.monotonic()
+
+
+def _orkestra_mesgul_default(config: dict) -> bool:
+    """Varsayılan orkestra meşgul kontrolü: `durum --json` okur.
+
+    `gorev_durum` içinde `calisiyor` veya `onay-bekliyor` > 0 ise True.
+    Hata kodu dönerse (okunamadı) -> True (güvenli taraf: kapatma).
+    """
+    try:
+        raw, hata = durum_status.run_durum(config.get("orkestra"), "orkestra")
+    except Exception:
+        return True
+    if hata is not None:
+        return True
+    if not isinstance(raw, dict):
+        return True
+    gorev_durum = raw.get("gorev_durum")
+    if not isinstance(gorev_durum, dict):
+        return True
+    calisiyor = gorev_durum.get("calisiyor")
+    onay = gorev_durum.get("onay-bekliyor")
+    if isinstance(calisiyor, int) and not isinstance(calisiyor, bool) and calisiyor > 0:
+        return True
+    if isinstance(onay, int) and not isinstance(onay, bool) and onay > 0:
+        return True
+    return False
+
+
+def reap_idle(
+    config: dict,
+    idle_minutes: float,
+    simdi: float | None = None,
+    orkestra_mesgul: Any | None = None,
+) -> list[str]:
+    """Boşta kalan araçları kapatır. Kapatılan araç adlarını döner.
+
+    Kural: yalnız `_kendi_pidlerimiz` içindeki pid'e sahip, `_son_dokunus`
+    kaydı olan ve `simdi - son_dokunus >= idle_minutes*60` olan araçlar
+    `stop()` ile kapatılır. `idle_minutes <= 0` → hiçbir şey yapma.
+    Elle/başka süreçten açılmış (kendi_pidlerimiz dışı) araca ASLA dokunma.
+    orkestra için kapatmadan önce meşgul mü kontrolü: `orkestra_mesgul`
+    (çağrılabilir, test için enjekte edilebilir; None ise varsayılan uygulama)
+    True dönerse veya hata verirse (okunamadı) KAPATMA (güvenli taraf).
+    `simdi` None ise time.monotonic().
+    """
+    if idle_minutes <= 0:
+        return []
+
+    if simdi is None:
+        simdi = time.monotonic()
+
+    if orkestra_mesgul is None:
+        orkestra_mesgul = _orkestra_mesgul_default
+
+    # Adayları kilit altında topla; `durum --json` alt süreci (orkestra
+    # meşgul kontrolü) kilit DIŞINDA çalışır, yoksa panel uçları o sürece
+    # kadar bloklanırdı.
+    adaylar: list[str] = []
+    with _lock:
+        state = _read_state()
+        for ad in TOOLS:
+            pid = state.get(ad)
+            if pid is None or pid not in _kendi_pidlerimiz:
+                continue  # yok ya da elle/başka süreçten açılmış: dokunma
+            son = _son_dokunus.get(ad)
+            if son is None:
+                continue  # dokunuş kaydı yok: dokunma
+            if simdi - son < idle_minutes * 60:
+                continue  # henüz boşta değil
+            adaylar.append(ad)
+
+    kapatilan: list[str] = []
+    for ad in adaylar:
+        if ad == "orkestra":
+            try:
+                if orkestra_mesgul(config):
+                    continue  # meşgul: kapatma
+            except Exception:
+                continue  # okunamadı: güvenli taraf, kapatma
+        _, hata = stop(ad, config)
+        if hata is None:
+            kapatilan.append(ad)
+    return kapatilan
+
+
+def idle_minutes(config: dict) -> float:
+    """Config'ten `araclar.bosta_kapat_dakika` okur; bozuksa varsayılan 15.
+
+    `bool` sayı DEĞİLDİR: `isinstance(True, int)` doğrudur ama "15 dakika"
+    demek değildir. `config.get("araclar", {}).get("bosta_kapat_dakika")`
+    sayı (bool değil) ve >= 0 ise o, değilse varsayılan 15; 0 = kapalı.
+    """
+    arac_cfg = config.get("araclar")
+    if not isinstance(arac_cfg, dict):
+        return 15.0
+    val = arac_cfg.get("bosta_kapat_dakika")
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return 15.0
+    if val < 0:
+        return 15.0
+    return float(val)
+
+
+_reaper_stop_event: threading.Event | None = None
+_reaper_thread: threading.Thread | None = None
+
+
+def start_reaper(
+    load_config_fn: Any,
+    kontrol_saniye: float = 60.0,
+) -> threading.Thread:
+    """Boşta kalan araçları periyodik kapatan daemon thread'i başlatır.
+
+    Her turda `load_config_fn()` ile config'i okur (ConfigError/hata →
+    o turu atla), `idle_minutes(config)` ile süreyi alır, `reap_idle`
+    çağırır; hiçbir istisna thread'i öldürmesin. Thread'i durdurmak için
+    `stop_reaper()` çağırın.
+    """
+    global _reaper_stop_event, _reaper_thread
+
+    if _reaper_thread is not None and _reaper_thread.is_alive():
+        return _reaper_thread
+
+    _reaper_stop_event = threading.Event()
+
+    def _run():
+        while not _reaper_stop_event.wait(kontrol_saniye):
+            try:
+                config = load_config_fn()
+            except Exception:
+                continue  # bu turu atla
+            try:
+                idle = idle_minutes(config)
+                reap_idle(config, idle)
+            except Exception:
+                pass  # thread'i öldürme
+
+    _reaper_thread = threading.Thread(target=_run, daemon=True, name="kule-reaper")
+    _reaper_thread.start()
+    return _reaper_thread
+
+
+def stop_reaper() -> None:
+    """Reaper thread'ini durdurur (varsa)."""
+    global _reaper_stop_event, _reaper_thread
+    if _reaper_stop_event is not None:
+        _reaper_stop_event.set()
+    if _reaper_thread is not None:
+        _reaper_thread.join(timeout=2.0)
+    _reaper_stop_event = None
+    _reaper_thread = None

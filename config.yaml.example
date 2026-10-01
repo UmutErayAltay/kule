@@ -48,6 +48,9 @@ orkestra:
 # yetim tanımı harita'yla aynıdır). `app/collectors/harita_status.py` duruyor;
 # yeniden açmak için `app/aggregator.py`'ye tek satır + panel kartı gerekir.
 
+araclar:                     # panel araçları (atlas/orkestra/harita) ayarları
+  bosta_kapat_dakika: 15     # 0 = otomatik kapatma kapalı
+
 telegram:
   bot_token: ""   # boş bırak, env'den de okunabilir: KULE_TELEGRAM_BOT_TOKEN
   chat_id: ""     # KULE_TELEGRAM_CHAT_ID

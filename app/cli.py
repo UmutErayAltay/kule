@@ -22,7 +22,7 @@ import uvicorn
 
 from app.aggregator import get_cached_summary
 from app.config import PROJECT_ROOT, ConfigError, load_config
-from app.launcher import shutdown as shutdown_launched_tools
+from app.launcher import shutdown as shutdown_launched_tools, start_reaper, stop_reaper
 from app.notifier import build_alert_message, send_telegram_message
 
 DEFAULT_HOST = "127.0.0.1"
@@ -126,6 +126,13 @@ def main() -> None:
     # `--notify-once` ve testler bu hakkı kazanmamalı (bkz.
     # `app/launcher.py::shutdown` docstring'i).
     atexit.register(shutdown_launched_tools)
+
+    # Reaper: boşta kalan araçları periyodik kapat.
+    # YALNIZCA sunucu dalında, --reload VERİLMİŞSE başlatma (test/reload
+    # modunda ayrı süreçler açılır, reaper karışmasın).
+    if not args.reload:
+        atexit.register(stop_reaper)
+        start_reaper(load_config)
 
     uvicorn.run(
         "app.main:app",

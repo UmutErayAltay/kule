@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import ConfigError, load_config
@@ -26,6 +26,7 @@ from app.launcher import (
     restart,
     start,
     stop,
+    touch,
 )
 
 app = FastAPI(title="kule")
@@ -84,6 +85,20 @@ def dashboard() -> HTMLResponse:
 # vault yolu hep oradan gelir.
 
 
+def _extract_frame_origin(request: Request) -> str | None:
+    """Request'ten frame_origin üretir.
+
+    Tarayıcı kule'yi hangi adresle açtıysa araç ona izin vermiş olur.
+    Sadece http://127.0.0.1:port veya http://localhost:port kabul edilir.
+    Hostname 127.0.0.1 veya localhost değilse ya da port yoksa None.
+    """
+    hostname = request.url.hostname
+    port = request.url.port
+    if hostname not in ("127.0.0.1", "localhost") or port is None:
+        return None
+    return f"http://{hostname}:{port}"
+
+
 def _no_config() -> JSONResponse:
     return JSONResponse(
         status_code=500,
@@ -127,8 +142,9 @@ def api_tools() -> JSONResponse:
 
 
 @app.post("/api/tools/{ad}/start")
-def api_tool_start(ad: str) -> JSONResponse:
-    return _tool_action(ad, lambda: start(ad, _config))
+def api_tool_start(ad: str, request: Request) -> JSONResponse:
+    frame_origin = _extract_frame_origin(request)
+    return _tool_action(ad, lambda: start(ad, _config, frame_origin))
 
 
 @app.post("/api/tools/{ad}/stop")
@@ -137,8 +153,9 @@ def api_tool_stop(ad: str) -> JSONResponse:
 
 
 @app.post("/api/tools/{ad}/restart")
-def api_tool_restart(ad: str) -> JSONResponse:
-    return _tool_action(ad, lambda: restart(ad, _config))
+def api_tool_restart(ad: str, request: Request) -> JSONResponse:
+    frame_origin = _extract_frame_origin(request)
+    return _tool_action(ad, lambda: restart(ad, _config, frame_origin))
 
 
 @app.get("/api/tools/{ad}/health")
@@ -149,3 +166,19 @@ def api_tool_health(ad: str) -> JSONResponse:
     if ad not in TOOLS:
         return _unknown_tool()
     return JSONResponse(content=health(ad))
+
+
+@app.post("/api/tools/{ad}/touch")
+def api_tool_touch(ad: str) -> JSONResponse:
+    """Araç sekmesi aktifken periyodik çağrılır; boşta kapatmayı geciktirir.
+
+    Bilinmeyen ad → mevcut `_unknown_tool` 404; config hatası → mevcut
+    `_no_config` 500; aksi hâlde {"ok": true}. Uç yalnız bu süreçte
+    kule'nin açtığı araçta kayıt tutar, değilse sessizce no-op.
+    """
+    if _config_error is not None:
+        return _no_config()
+    if ad not in TOOLS:
+        return _unknown_tool()
+    touch(ad)
+    return JSONResponse(content={"ok": True})
