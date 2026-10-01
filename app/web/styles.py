@@ -309,4 +309,50 @@ table.data-table {
   .card-grid { grid-template-columns: 1fr; }
   .card-wide { grid-column: auto; }
 }
+
+/* ---- araç kartları (atlas / orkestra / harita) ---- */
+
+/* Üç araç yan yana tek satıra sığsın diye ayrı ızgarada: kart içinde
+   düğme sırası okunur kalsın, kart yükseklikleri eşitlensin. */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .tool-grid { grid-template-columns: 1fr; }
+}
+
+.tool-card .card-head { margin-bottom: 8px; }
+
+.tool-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+/* Buton mevcut paletten: koyu zemin, hairline kenarlık, keskin köşe.
+   `danger` sınıfı yalnızca "Durdur"da — yoksa her kartta iki kırmızı
+   buton gürültü yaratırdı. */
+.btn {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:disabled:hover { border-color: var(--border); color: var(--text); }
+.btn-danger:hover { border-color: var(--danger); color: var(--danger); }
 """

@@ -16,11 +16,13 @@ sayılmaz.
 from __future__ import annotations
 
 import argparse
+import atexit
 
 import uvicorn
 
 from app.aggregator import get_cached_summary
 from app.config import PROJECT_ROOT, ConfigError, load_config
+from app.launcher import shutdown as shutdown_launched_tools
 from app.notifier import build_alert_message, send_telegram_message
 
 DEFAULT_HOST = "127.0.0.1"
@@ -118,6 +120,12 @@ def main() -> None:
         return
 
     _warn_if_config_missing()
+
+    # Sunucu modu: kule kapanırken panelden başlatılan alt süreçleri de
+    # kapat. Kayıt YALNIZCA burada, sunucuyu kuran süreçte yapılır —
+    # `--notify-once` ve testler bu hakkı kazanmamalı (bkz.
+    # `app/launcher.py::shutdown` docstring'i).
+    atexit.register(shutdown_launched_tools)
 
     uvicorn.run(
         "app.main:app",

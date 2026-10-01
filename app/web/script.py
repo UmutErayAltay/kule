@@ -649,9 +649,81 @@ DASHBOARD_JS = """
       });
   }
 
+  // ---- araç yönetimi (atlas / orkestra / harita) -----------
+  //
+  // `/api/tools` süreç durumunu verir; başlat/durdur/yeniden başlat
+  // efektli işlemlerdir (alt süreç doğar/ölür) ve yanıt `{"error": ...}`
+  // dönebilir — hata mesajı sabit Türkçe cümledir ve `#tools-error`
+  // altında kalıcı görünür. Ayrı bir polling döngüsü yok: durum
+  // 30 saniyelik turda, `/api/summary` ile birlikte tazelenir.
+
+  function renderTools(tools) {
+    listOrEmpty(tools).forEach(function (t) {
+      if (!isPlainObject(t)) return;
+      var ad = String(t.ad || "");
+      var running = t.calisiyor === true;
+      // Rozet rengi süreçten gelir: süreç yönetim durumu panelin
+      // genel sağlık rengini ETKİLEMEZ (bir araç kapalıyken kule sorun
+      // yaşamıyor olabilir).
+      setBadge(qs("tool-badge-" + ad), running ? "ok" : "neutral", running ? "çalışıyor" : "kapalı");
+      setText("tool-port-" + ad, num(t.port));
+      setText("tool-pid-" + ad, t.pid != null ? String(t.pid) : "—");
+      // `hazir` boolean ya da null (ölçemedim): null -> "bilinmiyor", 0/1 DEĞİL.
+      setText("tool-hazir-" + ad, typeof t.hazir === "boolean" ? (t.hazir ? "hazır" : "yok") : UNKNOWN);
+    });
+  }
+
+  function toolAction(ad, action) {
+    return fetch("/api/tools/" + encodeURIComponent(ad) + "/" + action, { method: "POST" })
+      .then(function (resp) {
+        return resp.json().then(function (body) {
+          if (!resp.ok) throw new Error((body && body.error) || ("HTTP " + resp.status));
+          return body;
+        });
+      })
+      .then(function () {
+        setText("tools-error", "");
+        return fetchTools();
+      })
+      .catch(function (e) {
+        // Efektli işlem: kullanıcı ne olduğunu görmeli. Son bilinen
+        // kart durumu ekranda kalır, hata mesajı alt satırda belirir.
+        setText("tools-error", e && e.message ? e.message : String(e));
+      });
+  }
+
+  function bindToolActions() {
+    ["atlas", "orkestra", "harita"].forEach(function (ad) {
+      ["start", "stop", "restart"].forEach(function (action) {
+        var btn = qs("tool-" + action + "-" + ad);
+        if (btn) btn.addEventListener("click", function () { toolAction(ad, action); });
+      });
+    });
+  }
+
+  function fetchTools() {
+    return fetch("/api/tools", { headers: { Accept: "application/json" } })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        return resp.json();
+      })
+      .then(function (data) {
+        renderTools(data && data.tools);
+      })
+      .catch(function () {
+        // config eksikse ya da kule kapalıysa: kartlar son bilinen
+        // hâlinde kalır, sessizce boşaltılmaz.
+      });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     fetchSummary();
-    setInterval(fetchSummary, REFRESH_MS);
+    fetchTools();
+    bindToolActions();
+    setInterval(function () {
+      fetchSummary();
+      fetchTools();
+    }, REFRESH_MS);
   });
 })();
 """

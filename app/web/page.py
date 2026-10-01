@@ -280,6 +280,65 @@ _HTML_MID = """</style>
   </div>
 </section>
 
+<section class="block">
+  <p class="eyebrow">Araçlar</p>
+  <div class="tool-grid">
+
+    <div class="card tool-card">
+      <div class="card-head">
+        <span class="badge badge-neutral" id="tool-badge-atlas">bekliyor</span>
+        <span class="tool-name">atlas</span>
+      </div>
+      <dl class="kv-list">
+        <dt>port</dt><dd id="tool-port-atlas">—</dd>
+        <dt>pid</dt><dd id="tool-pid-atlas">—</dd>
+        <dt>veri</dt><dd id="tool-hazir-atlas">—</dd>
+      </dl>
+      <div class="tool-actions">
+        <button class="btn" id="tool-start-atlas" type="button">Başlat</button>
+        <button class="btn btn-danger" id="tool-stop-atlas" type="button">Durdur</button>
+        <button class="btn" id="tool-restart-atlas" type="button">Yeniden Başlat</button>
+      </div>
+    </div>
+
+    <div class="card tool-card">
+      <div class="card-head">
+        <span class="badge badge-neutral" id="tool-badge-orkestra">bekliyor</span>
+        <span class="tool-name">orkestra</span>
+      </div>
+      <dl class="kv-list">
+        <dt>port</dt><dd id="tool-port-orkestra">—</dd>
+        <dt>pid</dt><dd id="tool-pid-orkestra">—</dd>
+        <dt>veri</dt><dd id="tool-hazir-orkestra">—</dd>
+      </dl>
+      <div class="tool-actions">
+        <button class="btn" id="tool-start-orkestra" type="button">Başlat</button>
+        <button class="btn btn-danger" id="tool-stop-orkestra" type="button">Durdur</button>
+        <button class="btn" id="tool-restart-orkestra" type="button">Yeniden Başlat</button>
+      </div>
+    </div>
+
+    <div class="card tool-card">
+      <div class="card-head">
+        <span class="badge badge-neutral" id="tool-badge-harita">bekliyor</span>
+        <span class="tool-name">harita</span>
+      </div>
+      <dl class="kv-list">
+        <dt>port</dt><dd id="tool-port-harita">—</dd>
+        <dt>pid</dt><dd id="tool-pid-harita">—</dd>
+        <dt>veri</dt><dd id="tool-hazir-harita">—</dd>
+      </dl>
+      <div class="tool-actions">
+        <button class="btn" id="tool-start-harita" type="button">Başlat</button>
+        <button class="btn btn-danger" id="tool-stop-harita" type="button">Durdur</button>
+        <button class="btn" id="tool-restart-harita" type="button">Yeniden Başlat</button>
+      </div>
+    </div>
+
+  </div>
+  <div class="stat-sub num-bad" id="tools-error"></div>
+</section>
+
 </main>
 <script>"""
 
