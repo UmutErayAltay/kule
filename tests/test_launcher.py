@@ -524,10 +524,25 @@ def test_html_araclar_bolumu_ve_uc_araç_adı(client, temiz_config):
     assert "Araçlar" in html
     for ad in TOOL_ADLARI:
         assert ad in html
-        # düğmeler de sayfada olmalı (id düzeni: tool-<eylem>-<araç>)
-        assert f'tool-start-{ad}' in html
+        # sekme + panel + iframe alanı (id düzeni: tool-<eylem>-<araç>)
+        assert f'id="tab-{ad}"' in html
+        assert f'id="panel-{ad}"' in html
+        assert f'id="tool-frame-{ad}"' in html
         assert f'tool-stop-{ad}' in html
         assert f'tool-restart-{ad}' in html
+        assert f'tool-open-{ad}' in html
+        # Başlat düğmesi YOK: sekmeye tıklayınca araç kendiliğinden açılır
+        assert f'tool-start-{ad}' not in html
+    assert 'id="tab-kule"' in html and 'id="panel-kule"' in html
+
+
+def test_html_sekme_script_dogru_uclari_cagirir(client, temiz_config):
+    """Sekme akışı start -> health bekle -> iframe; 30 sn'de bir touch."""
+    html = client.get("/").text
+    assert '"/api/tools/" + encodeURIComponent(ad) + "/" + action' in html
+    assert "/health" in html and "/touch" in html
+    assert 'createElement("iframe")' in html
+    assert "sandbox" in html
 
 
 # ------------------------------------------------------------------ frame_origin

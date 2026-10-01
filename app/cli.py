@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import signal
+import sys
 
 import uvicorn
 
@@ -103,6 +105,21 @@ def run_notify_once(config: dict) -> None:
         )
 
 
+def _sigterm_cikis_yap() -> None:
+    """SIGTERM gelince normal çıkış yap ki `atexit` (araç kapatma) çalışsın.
+
+    uvicorn SIGTERM'i yakalar, düzgün kapanır, sonra sinyali yeniden
+    yükseltir; bizim işleyicimiz yoksa süreç varsayılan davranışla ölür ve
+    `atexit` HİÇ çalışmaz: `kill <pid>` kule'yi kapatır ama atlas /
+    orkestra / harita öksüz kalır. İşleyici `sys.exit(0)` ile normal
+    çıkış yolunu açar. Yalnızca ana iş parçacığında kurulabilir.
+    """
+    try:
+        signal.signal(signal.SIGTERM, lambda _sig, _frame: sys.exit(0))
+    except (ValueError, OSError):  # ana iş parçacığı değil / platform desteklemiyor
+        pass
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -126,6 +143,7 @@ def main() -> None:
     # `--notify-once` ve testler bu hakkı kazanmamalı (bkz.
     # `app/launcher.py::shutdown` docstring'i).
     atexit.register(shutdown_launched_tools)
+    _sigterm_cikis_yap()
 
     # Reaper: boşta kalan araçları periyodik kapat.
     # YALNIZCA sunucu dalında, --reload VERİLMİŞSE başlatma (test/reload

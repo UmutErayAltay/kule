@@ -651,17 +651,17 @@ DASHBOARD_JS = """
 
   // ---- araç yönetimi (atlas / orkestra / harita) -----------
   //
-  // `/api/tools` süreç durumunu verir; başlat/durdur/yeniden başlat
-  // efektli işlemlerdir (alt süreç doğar/ölür) ve yanıt `{"error": ...}`
-  // dönebilir — hata mesajı sabit Türkçe cümledir ve `#tools-error`
-  // altında kalıcı görünür. Ayrı bir polling döngüsü yok: durum
-  // 30 saniyelik turda, `/api/summary` ile birlikte tazelenir.
+  // `/api/tools` süreç durumunu verir; araçlar kartı salt durum gösterir,
+  // başlat/durdur sekme akışından yürür (aşağıda). Hata mesajları sabit
+  // Türkçe cümledir. Durum 30 saniyelik turda `/api/summary` ile birlikte
+  // tazelenir; sekme işlemlerinden sonra hemen yenilenir.
 
   function renderTools(tools) {
     listOrEmpty(tools).forEach(function (t) {
       if (!isPlainObject(t)) return;
       var ad = String(t.ad || "");
       var running = t.calisiyor === true;
+      runningNow[ad] = running;
       // Rozet rengi süreçten gelir: süreç yönetim durumu panelin
       // genel sağlık rengini ETKİLEMEZ (bir araç kapalıyken kule sorun
       // yaşamıyor olabilir).
@@ -670,35 +670,177 @@ DASHBOARD_JS = """
       setText("tool-pid-" + ad, t.pid != null ? String(t.pid) : "—");
       // `hazir` boolean ya da null (ölçemedim): null -> "bilinmiyor", 0/1 DEĞİL.
       setText("tool-hazir-" + ad, typeof t.hazir === "boolean" ? (t.hazir ? "hazır" : "yok") : UNKNOWN);
+      var dot = qs("tab-dot-" + ad);
+      if (dot) {
+        dot.classList.toggle("tab-dot-on", running);
+        var tabEl = qs("tab-" + ad);
+        if (tabEl) tabEl.setAttribute("title", running ? ad + " çalışıyor" : ad + " kapalı");
+      }
     });
   }
 
-  function toolAction(ad, action) {
+  // ---- sekmeler: araç sekmesine tıklayınca otomatik başlat + iframe ----
+  //
+  // Başlat/Durdur düğmesi yok: sekme açılınca kule aracı başlatır, hazır
+  // olunca (`/health`) aracın kendi paneli iframe'e yüklenir. Kule'nin
+  // kendi başlattığı araç `cerceve: true` döner (CSP yalnız kule adresine
+  // çerçeve izni verir). Elle başka yerden açılmış araç iframe'de
+  // açılamaz; bu durumda kullanıcıya yeniden başlatma önerilir. Sekme
+  // görünürken 30 sn'de bir `touch` gider, kule de kullanılmayan aracı
+  // kendisi kapatır.
+
+  var TOOLS = ["atlas", "orkestra", "harita"];
+  var TOUCH_MS = 30000;
+  var READY_POLL_MS = 700;
+  var READY_MAX_TRIES = 60;
+  var activeTab = "kule";
+  var loading = {};
+  var runningNow = {};  // son /api/tools turundan: ad -> bool
+
+  function postTool(ad, action) {
     return fetch("/api/tools/" + encodeURIComponent(ad) + "/" + action, { method: "POST" })
       .then(function (resp) {
         return resp.json().then(function (body) {
           if (!resp.ok) throw new Error((body && body.error) || ("HTTP " + resp.status));
           return body;
         });
-      })
-      .then(function () {
-        setText("tools-error", "");
-        return fetchTools();
-      })
-      .catch(function (e) {
-        // Efektli işlem: kullanıcı ne olduğunu görmeli. Son bilinen
-        // kart durumu ekranda kalır, hata mesajı alt satırda belirir.
-        setText("tools-error", e && e.message ? e.message : String(e));
       });
   }
 
-  function bindToolActions() {
-    ["atlas", "orkestra", "harita"].forEach(function (ad) {
-      ["start", "stop", "restart"].forEach(function (action) {
-        var btn = qs("tool-" + action + "-" + ad);
-        if (btn) btn.addEventListener("click", function () { toolAction(ad, action); });
+  function showNotice(ad, text) {
+    var el = qs("tool-notice-" + ad);
+    if (!el) return;
+    el.textContent = text || "";
+    el.hidden = !text;
+  }
+
+  function frameHost(ad) { return qs("tool-frame-" + ad); }
+
+  function clearFrame(ad) {
+    var host = frameHost(ad);
+    if (host) host.textContent = "";
+    var open = qs("tool-open-" + ad);
+    if (open) open.hidden = true;
+  }
+
+  function mountFrame(ad, url) {
+    var host = frameHost(ad);
+    if (!host) return;
+    if (host.querySelector("iframe")) return;  // sekme değişince yeniden yüklenmez
+    var f = document.createElement("iframe");
+    f.src = url;
+    f.title = ad;
+    f.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
+    host.appendChild(f);
+    var open = qs("tool-open-" + ad);
+    if (open) { open.hidden = false; open.setAttribute("data-url", url); }
+  }
+
+  function waitReady(ad, tries) {
+    return fetch("/api/tools/" + encodeURIComponent(ad) + "/health", { headers: { Accept: "application/json" } })
+      .then(function (resp) { return resp.ok ? resp.json() : null; })
+      .then(function (h) {
+        if (h && h.erisilebilir === true) return h;
+        if (tries >= READY_MAX_TRIES) throw new Error(ad + " zamanında hazır olmadı");
+        return new Promise(function (resolve) { setTimeout(resolve, READY_POLL_MS); })
+          .then(function () { return waitReady(ad, tries + 1); });
+      });
+  }
+
+  function ensureTool(ad) {
+    if (loading[ad]) return;
+    if (frameHost(ad) && frameHost(ad).querySelector("iframe")) {
+      // Araç boşta kapatıldıysa iframe ölüdür: temizle, yeniden başlat.
+      if (runningNow[ad] !== false) { touchTool(ad); return; }
+      clearFrame(ad);
+    }
+    loading[ad] = true;
+    showNotice(ad, "");
+    setText("tool-state-" + ad, "açılıyor…");
+    postTool(ad, "start")
+      .then(function (durum) {
+        return waitReady(ad, 0).then(function (h) {
+          if (durum && durum.cerceve !== true) {
+            setText("tool-state-" + ad, "çalışıyor (kule dışında açılmış)");
+            showNotice(ad, "Bu araç kule dışında başlatılmış; kule içinde gösterilemez. " +
+              "“Yeniden başlat” kule’den açar, ya da “Yeni sekmede aç” ile ayrı sekmede kullan.");
+            var open = qs("tool-open-" + ad);
+            if (open) { open.hidden = false; open.setAttribute("data-url", h.url); }
+            return;
+          }
+          setText("tool-state-" + ad, "çalışıyor");
+          mountFrame(ad, h.url);
+        });
+      })
+      .catch(function (e) {
+        setText("tool-state-" + ad, "açılamadı");
+        showNotice(ad, e && e.message ? e.message : String(e));
+      })
+      .then(function () { loading[ad] = false; return fetchTools(); });
+  }
+
+  function touchTool(ad) {
+    fetch("/api/tools/" + encodeURIComponent(ad) + "/touch", { method: "POST" }).catch(function () {});
+  }
+
+  function activate(tab) {
+    if (tab !== "kule" && TOOLS.indexOf(tab) < 0) tab = "kule";
+    activeTab = tab;
+    ["kule"].concat(TOOLS).forEach(function (t) {
+      var on = t === tab;
+      var tabEl = qs("tab-" + t);
+      var panel = qs("panel-" + t);
+      if (tabEl) {
+        tabEl.classList.toggle("tab-active", on);
+        tabEl.setAttribute("aria-selected", on ? "true" : "false");
+      }
+      if (panel) panel.hidden = !on;
+    });
+    try { history.replaceState(null, "", tab === "kule" ? location.pathname : "#" + tab); } catch (e) {}
+    if (tab !== "kule") ensureTool(tab);
+  }
+
+  function bindTabs() {
+    ["kule"].concat(TOOLS).forEach(function (t) {
+      var el = qs("tab-" + t);
+      if (el) el.addEventListener("click", function () { activate(t); });
+    });
+    TOOLS.forEach(function (ad) {
+      var stopBtn = qs("tool-stop-" + ad);
+      if (stopBtn) stopBtn.addEventListener("click", function () {
+        postTool(ad, "stop")
+          .then(function () {
+            clearFrame(ad);
+            showNotice(ad, "");
+            setText("tool-state-" + ad, "kapalı — sekmeye yeniden tıklayınca açılır");
+            return fetchTools();
+          })
+          .catch(function (e) { showNotice(ad, e && e.message ? e.message : String(e)); });
+      });
+      var restartBtn = qs("tool-restart-" + ad);
+      if (restartBtn) restartBtn.addEventListener("click", function () {
+        clearFrame(ad);
+        loading[ad] = true;
+        setText("tool-state-" + ad, "yeniden başlıyor…");
+        showNotice(ad, "");
+        postTool(ad, "restart")
+          .then(function () { return waitReady(ad, 0); })
+          .then(function (h) { setText("tool-state-" + ad, "çalışıyor"); mountFrame(ad, h.url); })
+          .catch(function (e) {
+            setText("tool-state-" + ad, "açılamadı");
+            showNotice(ad, e && e.message ? e.message : String(e));
+          })
+          .then(function () { loading[ad] = false; return fetchTools(); });
+      });
+      var openBtn = qs("tool-open-" + ad);
+      if (openBtn) openBtn.addEventListener("click", function () {
+        var url = openBtn.getAttribute("data-url");
+        if (url) window.open(url, "_blank", "noopener");
       });
     });
+    setInterval(function () {
+      if (activeTab !== "kule" && !document.hidden) touchTool(activeTab);
+    }, TOUCH_MS);
   }
 
   function fetchTools() {
@@ -719,7 +861,8 @@ DASHBOARD_JS = """
   document.addEventListener("DOMContentLoaded", function () {
     fetchSummary();
     fetchTools();
-    bindToolActions();
+    bindTabs();
+    activate((location.hash || "").replace("#", ""));
     setInterval(function () {
       fetchSummary();
       fetchTools();

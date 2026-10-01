@@ -185,3 +185,21 @@ def test_without_notify_once_starts_server(monkeypatch, argv, no_server):
     args, kwargs = no_server[0]
     assert args[0] == "app.main:app"
     assert kwargs["port"] == 9999
+
+
+def test_sigterm_cikis_yap_sistemexit_yukseltir():
+    """SIGTERM işleyicisi `sys.exit` çağırır: atexit (araç kapatma) çalışsın."""
+    import signal
+
+    from app import cli
+
+    onceki = signal.getsignal(signal.SIGTERM)
+    try:
+        cli._sigterm_cikis_yap()
+        isleyici = signal.getsignal(signal.SIGTERM)
+        assert callable(isleyici) and isleyici is not onceki
+        with pytest.raises(SystemExit) as e:
+            isleyici(signal.SIGTERM, None)
+        assert e.value.code == 0
+    finally:
+        signal.signal(signal.SIGTERM, onceki)

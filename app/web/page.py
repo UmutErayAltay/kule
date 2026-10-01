@@ -76,6 +76,15 @@ _HTML_MID = """</style>
   </div>
 </div>
 
+<nav class="tabs" id="tabs" role="tablist" aria-label="Paneller">
+  <button class="tab tab-active" id="tab-kule" data-tab="kule" role="tab" type="button" aria-selected="true">Kule</button>
+  <button class="tab" id="tab-atlas" data-tab="atlas" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-atlas"></span>atlas</button>
+  <button class="tab" id="tab-orkestra" data-tab="orkestra" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-orkestra"></span>orkestra</button>
+  <button class="tab" id="tab-harita" data-tab="harita" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-harita"></span>harita</button>
+</nav>
+
+<div class="tab-panel" id="panel-kule" role="tabpanel">
+
 <section class="block">
   <div class="stat-grid">
     <div class="stat-tile" id="stat-dirty-tile">
@@ -294,11 +303,6 @@ _HTML_MID = """</style>
         <dt>pid</dt><dd id="tool-pid-atlas">—</dd>
         <dt>veri</dt><dd id="tool-hazir-atlas">—</dd>
       </dl>
-      <div class="tool-actions">
-        <button class="btn" id="tool-start-atlas" type="button">Başlat</button>
-        <button class="btn btn-danger" id="tool-stop-atlas" type="button">Durdur</button>
-        <button class="btn" id="tool-restart-atlas" type="button">Yeniden Başlat</button>
-      </div>
     </div>
 
     <div class="card tool-card">
@@ -311,11 +315,6 @@ _HTML_MID = """</style>
         <dt>pid</dt><dd id="tool-pid-orkestra">—</dd>
         <dt>veri</dt><dd id="tool-hazir-orkestra">—</dd>
       </dl>
-      <div class="tool-actions">
-        <button class="btn" id="tool-start-orkestra" type="button">Başlat</button>
-        <button class="btn btn-danger" id="tool-stop-orkestra" type="button">Durdur</button>
-        <button class="btn" id="tool-restart-orkestra" type="button">Yeniden Başlat</button>
-      </div>
     </div>
 
     <div class="card tool-card">
@@ -328,15 +327,51 @@ _HTML_MID = """</style>
         <dt>pid</dt><dd id="tool-pid-harita">—</dd>
         <dt>veri</dt><dd id="tool-hazir-harita">—</dd>
       </dl>
-      <div class="tool-actions">
-        <button class="btn" id="tool-start-harita" type="button">Başlat</button>
-        <button class="btn btn-danger" id="tool-stop-harita" type="button">Durdur</button>
-        <button class="btn" id="tool-restart-harita" type="button">Yeniden Başlat</button>
-      </div>
     </div>
 
   </div>
   <div class="stat-sub num-bad" id="tools-error"></div>
+</section>
+
+</div>
+
+<section class="tab-panel tool-panel" id="panel-atlas" role="tabpanel" hidden>
+  <div class="tool-bar">
+    <span class="tool-state" id="tool-state-atlas">kapalı</span>
+    <span class="tool-bar-actions">
+      <button class="btn" id="tool-open-atlas" type="button" hidden>Yeni sekmede aç</button>
+      <button class="btn" id="tool-restart-atlas" type="button">Yeniden başlat</button>
+      <button class="btn btn-danger" id="tool-stop-atlas" type="button">Şimdi kapat</button>
+    </span>
+  </div>
+  <div class="tool-notice" id="tool-notice-atlas" hidden></div>
+  <div class="tool-frame-host" id="tool-frame-atlas"></div>
+</section>
+
+<section class="tab-panel tool-panel" id="panel-orkestra" role="tabpanel" hidden>
+  <div class="tool-bar">
+    <span class="tool-state" id="tool-state-orkestra">kapalı</span>
+    <span class="tool-bar-actions">
+      <button class="btn" id="tool-open-orkestra" type="button" hidden>Yeni sekmede aç</button>
+      <button class="btn" id="tool-restart-orkestra" type="button">Yeniden başlat</button>
+      <button class="btn btn-danger" id="tool-stop-orkestra" type="button">Şimdi kapat</button>
+    </span>
+  </div>
+  <div class="tool-notice" id="tool-notice-orkestra" hidden></div>
+  <div class="tool-frame-host" id="tool-frame-orkestra"></div>
+</section>
+
+<section class="tab-panel tool-panel" id="panel-harita" role="tabpanel" hidden>
+  <div class="tool-bar">
+    <span class="tool-state" id="tool-state-harita">kapalı</span>
+    <span class="tool-bar-actions">
+      <button class="btn" id="tool-open-harita" type="button" hidden>Yeni sekmede aç</button>
+      <button class="btn" id="tool-restart-harita" type="button">Yeniden başlat</button>
+      <button class="btn btn-danger" id="tool-stop-harita" type="button">Şimdi kapat</button>
+    </span>
+  </div>
+  <div class="tool-notice" id="tool-notice-harita" hidden></div>
+  <div class="tool-frame-host" id="tool-frame-harita"></div>
 </section>
 
 </main>

@@ -331,12 +331,6 @@ table.data-table {
   color: var(--text);
 }
 
-.tool-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
 
 /* Buton mevcut paletten: koyu zemin, hairline kenarlık, keskin köşe.
    `danger` sınıfı yalnızca "Durdur"da — yoksa her kartta iki kırmızı
@@ -355,4 +349,83 @@ table.data-table {
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn:disabled:hover { border-color: var(--border); color: var(--text); }
 .btn-danger:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ---- sekmeler: Kule + araç panelleri (iframe) ---- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.tab {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 7px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.tab:hover { color: var(--text); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tab-active {
+  color: var(--text);
+  background: var(--bg-elev);
+  border-color: var(--border);
+  margin-bottom: -1px;
+  border-bottom: 1px solid var(--bg-elev);
+}
+/* Nokta: açık = dolu, kapalı = içi boş halka. Renk tek başına taşımaz. */
+.tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+  box-sizing: border-box;
+}
+.tab-dot-on { background: var(--success); border-color: var(--success); }
+
+.tab-panel[hidden] { display: none; }
+
+.tool-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.tool-state {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.tool-bar-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn[hidden] { display: none; }
+.tool-notice {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.tool-notice[hidden] { display: none; }
+.tool-frame-host iframe {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 190px);
+  min-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
 """
