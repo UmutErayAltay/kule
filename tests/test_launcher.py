@@ -11,6 +11,7 @@ test sonunda kendiliğinden süreç kapatmaya çalışmaz.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import threading
 import time
@@ -20,6 +21,13 @@ from fastapi.testclient import TestClient
 
 from app import launcher
 from app import main as main_module
+
+# atlas/orkestra/harita ayrı bir depodan kurulan araçlardır; yoksa onları GERÇEKTEN
+# bulmayı bekleyen testler atlanır (CI'da kurulu değiller).
+araclar_gerekli = pytest.mark.skipif(
+    not all(shutil.which(ad) for ad in ("atlas", "orkestra", "harita")),
+    reason="atlas/orkestra/harita kurulu değil",
+)
 
 TOOL_ADLARI = ["atlas", "orkestra", "harita"]
 
@@ -154,6 +162,7 @@ def test_tool_command_portlar_gorev_karariyla_sabit():
     assert launcher.TOOLS["harita"]["port"] == 8900
 
 
+@araclar_gerekli
 def test_tool_command_harita_vault_pozisyonel_alir(config):
     argv = launcher.tool_command("harita", config)
 
@@ -161,6 +170,7 @@ def test_tool_command_harita_vault_pozisyonel_alir(config):
     assert argv[-2:] == ["--port", "8900"]
 
 
+@araclar_gerekli
 def test_tool_command_vault_yoksa_harita_yine_calisir():
     argv = launcher.tool_command("harita", {})
 
@@ -196,6 +206,7 @@ def test_list_status_uc_araci_eksiksiz_doner(config):
     assert [t["ad"] for t in araclar] == TOOL_ADLARI
 
 
+@araclar_gerekli
 def test_status_alanlari_dogru_konumda(config):
     for arac in launcher.list_status(config):
         assert arac["port"] in (8770, 8780, 8900)
@@ -469,6 +480,7 @@ def test_api_tools_listesi_eksiksiz(client, temiz_config):
     assert all("port" in t and "calisiyor" in t for t in araclar)
 
 
+@araclar_gerekli
 def test_api_tools_start_stop_uc_kodu(client, temiz_config, canli_surecler, izole_state):
     baslat = client.post("/api/tools/atlas/start")
     assert baslat.status_code == 200

@@ -13,6 +13,11 @@ kaynağa (dosya sistemi, HTTP, Postgres, alt süreç) bağlanıp onları okur.
 Bir kaynağa ulaşılamazsa panel çökmez — o kaynağın kartı "erişilemiyor"
 gösterir, diğerleri etkilenmez.
 
+> **Not:** kule kişisel bir araçtır; bazı kaynaklar yazarın makinesine özgüdür (yerel cor proxy'si,
+> bir Markdown vault'u, atlas/orkestra/harita komut satırı araçları, BorsaSite ve readbunny servisleri).
+> Hiçbiri zorunlu değildir: yapılandırılmamış ya da ulaşılamayan kaynağın kartı "erişilemiyor"
+> gösterir. Testler bu araçlar kurulu olmadan da çalışır (ilgili testler atlanır).
+
 ## Kurulum
 
 ```bash
@@ -259,3 +264,7 @@ eski commitlenmemiş değişiklik: kule, borsa
 
 Hiçbir bakım bulgusu yoksa (ve hiçbir kaynak sorunlu değilse) mesaj
 üretilmez, `kule: her şey yolunda` basılır.
+
+## Lisans
+
+MIT, bkz. [LICENSE](LICENSE).

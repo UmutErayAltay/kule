@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "kule"
 version = "0.1.0"
 description = "Umut'un projelerinin durumunu tek panelde toplayan kontrol kulesi"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
     # fastapi 0.116-0.139 `starlette<1.0` istiyordu; starlette 1.x'e
@@ -24,6 +26,9 @@ dependencies = [
     "requests",
     "psutil",
 ]
+
+[project.urls]
+Homepage = "https://github.com/UmutErayAltay/kule"
 
 [project.optional-dependencies]
 dev = [

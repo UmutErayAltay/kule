@@ -342,7 +342,7 @@ def list_status(config: dict) -> list[dict[str, Any]]:
 def start(
     ad: str, config: dict, frame_origin: str | None = None
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Aracı başlatır. `(durum, hata)` döner; hata varsa durum None.
+    r"""Aracı başlatır. `(durum, hata)` döner; hata varsa durum None.
 
     İdempotent: zaten çalışıyorsa YENİ SÜREÇ AÇMAZ, mevcut durumu
     döner. Eksik exe'yi sessizce geçmez — kullanıcıya ne yapması
