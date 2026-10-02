@@ -98,8 +98,12 @@ TOOLS: dict[str, dict[str, Any]] = {
 
 # Windows'ta alt süreç kule'nin konsolundan koparılır; POSIX'te bu
 # bayraklar yok.
-if hasattr(subprocess, "DETACHED_PROCESS"):
-    _DETACH_FLAGS = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+# CREATE_NO_WINDOW (DETACHED_PROCESS DEĞİL): pip konsol başlatıcıları
+# (atlas.exe vb.) asıl python'u alt süreç olarak açar; konsolsuz
+# (DETACHED) bırakılırsa o çocuk kendine görünür bir cmd penceresi açar.
+# Gizli konsol çocuklara miras kalır, pencere çıkmaz.
+if hasattr(subprocess, "CREATE_NO_WINDOW"):
+    _DETACH_FLAGS = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
 else:  # pragma: no cover - bu makine Windows
     _DETACH_FLAGS = 0
 
@@ -136,7 +140,7 @@ def _resolve_exe(ad: str, config: dict) -> str | None:
     if found:
         return found
 
-    suffix = ".exe" if hasattr(subprocess, "DETACHED_PROCESS") else ""
+    suffix = ".exe" if hasattr(subprocess, "CREATE_NO_WINDOW") else ""
     for scheme in ("nt_user", "posix_user"):
         try:
             scripts = Path(sysconfig.get_path("scripts", scheme))
