@@ -24,6 +24,11 @@ anahtarı altında, hatalıysa `{"error": ...}` ile:
                    "kota": {"gun": <iso gun|null>, "toplam_istek": int, "uyari_sayisi": int,
                             "veri_var": <bool|null>} | null}
               | {"reachable": false, "error": "<sabit kod>"},
+      "bagimlilik": {"reachable": true, "son_tarama": <iso|null>,
+                     "repo_sayisi": <int>, "acikli_repo": <int>,
+                     "kritik_yuksek": <int>, "toplam_acik": <int>,
+                     "denetlenemedi": <int>}
+                | {"reachable": false, "error": "<sabit kod>"},
       "collected_at": <epoch saniye>
     }
 
@@ -41,6 +46,12 @@ yazar. Erişilemeyen kaynak `{"reachable": false, "error": <sabit kod>}`.
 Bu sayaçların (`bayat_readme`, `push_bekleyen`, `basarisiz`) panelde görünmesi
 Telegram'a GİTMESİ demek değildir: `notifier.py` yalnızca kaynağa
 erişilememesini ve `onay_bekleyen > 0` koşulunu uyarı sayar.
+
+`bagimlilik` bir ALT SÜREÇ DEĞİL, dosya tabanlı bir kaynaktır
+(`~/.bagimlilik/son.json`, `app/collectors/bagimlilik_status.py`): kule
+raporu okur, doğrular, sayıları verir. Onun `acikli_repo`/`kritik_yuksek`
+sayaçları da sürekli >0 olabilen inceleme bulgularıdır — panelde görünür,
+Telegram'a GİTMEZ.
 
 DOM kimlikleri (id) `DASHBOARD_JS` ile birebir eşleşir — biri değişirse
 diğeri de değişmeli, aksi halde sayfa sessizce boş kalır (JS elementi
@@ -126,6 +137,11 @@ _HTML_MID = """</style>
       <div class="stat-label">orkestra onay bekleyen</div>
       <div class="stat-value" id="stat-orkestra-value">—</div>
       <div class="stat-sub" id="stat-orkestra-sub"></div>
+    </div>
+    <div class="stat-tile" id="stat-bagimlilik-tile">
+      <div class="stat-label">bağımlılık açık repo</div>
+      <div class="stat-value" id="stat-bagimlilik-value">—</div>
+      <div class="stat-sub" id="stat-bagimlilik-sub"></div>
     </div>
   </div>
 </section>
@@ -246,6 +262,24 @@ _HTML_MID = """</style>
         <dl class="kv-list" id="orkestra-gorev-durum-kv"><div class="empty-row">yükleniyor…</div></dl>
         <p class="eyebrow" style="margin-top:10px;">kota</p>
         <dl class="kv-list" id="orkestra-kota-kv"><div class="empty-row">yükleniyor…</div></dl>
+      </div>
+    </div>
+
+    <div class="card-wide">
+      <p class="eyebrow">bağımlılık</p>
+      <div class="card">
+        <div class="card-head">
+          <span class="badge badge-neutral" id="bagimlilik-badge">bekliyor</span>
+        </div>
+        <div class="stat-sub num-bad" id="bagimlilik-error"></div>
+        <dl class="kv-list">
+          <dt>taranan repo</dt><dd id="bagimlilik-repo-sayisi">—</dd>
+          <dt>açık repo</dt><dd id="bagimlilik-acikli-repo">—</dd>
+          <dt>kritik + yüksek</dt><dd id="bagimlilik-kritik-yuksek">—</dd>
+          <dt>toplam açık</dt><dd id="bagimlilik-toplam-acik">—</dd>
+          <dt>denetlenemedi</dt><dd id="bagimlilik-denetlenemedi">—</dd>
+          <dt>son tarama</dt><dd id="bagimlilik-son-tarama">—</dd>
+        </dl>
       </div>
     </div>
 

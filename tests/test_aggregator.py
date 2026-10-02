@@ -178,7 +178,7 @@ def test_get_cached_summary_uses_default_ttl_constant(monkeypatch):
 
 # --- dalga G: atlas / orkestra ------------------------------------------
 #
-# `collect_all` artık SEKİZ kaynağı birleştiriyor (harita kartı panelden
+# `collect_all` artık DOKUZ kaynağı birleştiriyor (harita kartı panelden
 # çıkarıldı; `harita_status` modülü duruyor ama aggregator'a KAYITLI DEĞİL,
 # bkz. `test_harita_is_not_registered_in_aggregator`). Yeni collector'ların
 # kaydı elle yapıldığı için (CLAUDE.md madde 2) burada iki şey kilitleniyor:
@@ -215,11 +215,60 @@ def _patch_durum(monkeypatch, **patlayan_kaynaklar):
         else:
             deger = DURUM_GEZERLI[kaynak]
             monkeypatch.setattr(modul, "collect", lambda cfg, _d=deger: dict(_d))
+    _patch_bagimlilik(monkeypatch)
 
 
-def test_collect_all_registers_eight_sources(monkeypatch):
-    """Sekiz anahtar: altı eski + atlas/orkestra. Bir anahtar unutulursa
-    ya da yanlış yazılırsa burada yakalanır."""
+# `bagimlilik` dosya tabanlı bir kaynak (rapor dosyasını okur), yine de
+# aggregator'daki kayıt/izolasyon sözleşmesinin bir parçası: matematik
+# yapmaya gerek yok, sahte `collect` yeterli. `_patch_durum` bunu da
+# çağırır — testler GERÇEK dosya sistemine hiç gitmesin diye; yalnız
+# izolasyon testi `patlasin=True` ile üstüne yazar.
+def _patch_bagimlilik(monkeypatch, *, patlasin=False, deger=None):
+    if patlasin:
+        def boom(cfg):
+            raise RuntimeError("bagimlilik patladi")
+
+        monkeypatch.setattr(aggregator.bagimlilik_status, "collect", boom)
+        return
+    gecerli = deger if deger is not None else {
+        "reachable": True,
+        "repo_sayisi": 1,
+        "acikli_repo": 0,
+        "kritik_yuksek": 0,
+        "toplam_acik": 0,
+        "denetlenemedi": 0,
+        "son_tarama": "2026-10-02T22:42:46+00:00",
+    }
+    monkeypatch.setattr(aggregator.bagimlilik_status, "collect", lambda cfg: dict(gecerli))
+
+
+def test_collect_all_merges_bagimlilik_source(monkeypatch):
+    _patch_all_collectors(monkeypatch)
+    _patch_durum(monkeypatch)
+
+    result = aggregator.collect_all({})
+
+    assert result["bagimlilik"]["reachable"] is True
+    assert result["bagimlilik"]["repo_sayisi"] == 1
+
+
+def test_collect_all_isolates_failing_bagimlilik_collector(monkeypatch):
+    """bagimlilik patladığında yalnız o anahtar düşer, diğer sekiz sağlam kalır."""
+    _patch_all_collectors(monkeypatch)
+    _patch_durum(monkeypatch)
+    _patch_bagimlilik(monkeypatch, patlasin=True)
+
+    result = aggregator.collect_all({})
+
+    assert result["bagimlilik"] == {"error": "bagimlilik patladi"}
+    assert result["cor"] == {"reachable": True}
+    assert result["git"] == []
+    assert result["atlas"] == DURUM_GEZERLI["atlas"]
+
+
+def test_collect_all_registers_nine_sources(monkeypatch):
+    """Dokuz anahtar: altı eski + atlas/orkestra/bagimlilik. Bir anahtar
+    unutulursa ya da yanlış yazılırsa burada yakalanır."""
     _patch_all_collectors(monkeypatch)
     _patch_durum(monkeypatch)
 
@@ -234,6 +283,7 @@ def test_collect_all_registers_eight_sources(monkeypatch):
         "maintenance",
         "atlas",
         "orkestra",
+        "bagimlilik",
         "collected_at",
     }
     assert set(result) == beklenen

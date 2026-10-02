@@ -43,18 +43,19 @@ NON_SOURCE_KEYS = {"collected_at"}
 # girmez, `hidden` sayımına katılmaz); her bulgu kendi satırında listelenir.
 MAINTENANCE_KEY = "maintenance"
 
-# `durum --json` sözleşmesini konuşan üç kaynak (atlas/orkestra/harita).
-# Bunlar erişilemez olduklarında `{"reachable": False, "error": <sabit kod>}`
-# döndüğü için `_describe`'ın VAR OLAN "dict + reachable" dalı zaten onları
-# doğru tanır — erişilememe cümlesi ek bir yol istemez. Ancak sayı alanları
-# `reachable: True` iken de sorun bildirebilir; o dal aşağıda.
+# `durum --json` sözleşmesini konuşan üç kaynak (atlas/orkestra/harita) ve
+# dosya tabanlı `bagimlilik`. Bunlar erişilemez olduklarında
+# `{"reachable": False, "error": <sabit kod>}` döndüğü için `_describe`'ın
+# VAR OLAN "dict + reachable" dalı zaten onları doğru tanır — erişilememe
+# cümlesi ek bir yol istemez. Ancak sayı alanları `reachable: True` iken de
+# sorun bildirebilir; o dal aşağıda.
 #
 # SÖZLEŞME KURALI (sözleşme.md, "kule tarafı"): uyarı koşulları SPAM
 # OLMAMASI İÇİN DAR TUTULUR. Yalnızca gerçek arıza/uyumsuzluk bildirilir:
 #   - orkestra: onay_bekleyen > 0 (bir insanın kararı bekleniyor; karar
 #               verilince kendiliğinden sıfırlanır). `basarisiz` DEĞİL:
 #               biriken bir sayaç, eski tek görev sonsuza dek spam üretir.
-#   - üçü de: kaynağa ERİŞİLEMEMESİ (yapılandırılmamışsa `config_yok` hariç:
+#   - hepsi: kaynağa ERİŞİLEMEMESİ (yapılandırılmamışsa `config_yok` hariç:
 #               opsiyonel kaynak, izlenmiyor demektir).
 # `veri_bayat` (atlas) ve `indeks_bayat` (harita) BİLEREK Telegram'a gitmez,
 # yalnızca panelde sarı görünür: atlas taraması ve harita indeksi elle
@@ -63,9 +64,25 @@ MAINTENANCE_KEY = "maintenance"
 # `bayat_readme`, `push_bekleyen`, `kirli_repo` gibi SÜREKLİ >0
 # olan sayaçlar da YALNIZCA panelde görünür — her koşuda 3 kırık link varsa
 # her 15 dakikada bir mesaj atmak bildirimi değersiz kılar. Aynı sebeple
-# `kanitsiz_ya_da_supheli` ve `kota.uyari_sayisi` de uyarı üretmez: bunlar
-# inceleme bulgusudur, arıza değil.
-DURUM_SOURCES = ("atlas", "orkestra", "harita")
+# `kanitsiz_ya_da_supheli`, `kota.uyari_sayisi` ve bagimlilik'ın
+# `acikli_repo`/`kritik_yuksek`/`toplam_acik`/`denetlenemedi`
+# sayaçları da uyarı üretmez: bunlar inceleme bulgusudur, arıza değil.
+
+#: Kaynak -> "hiç izlenmiyor" demek olan sabit hata kodları (uyarı üretmez).
+#: `config_yok` her kaynak için geçerlidir: opsiyonel blok hiç yazılmamış.
+#: `okunamadi` YALNIZCA `bagimlilik` için muaftır: o kaynak raporu bir
+#: DOSYADAN okur ve dosya yoksa araç henüz hiç çalışmamış demektir — kule
+#: her cron koşusunda "bagimlilik erişilemiyor (okunamadi)" göndermemeli.
+#: atlas/orkestra/harita'da `okunamadi` GERÇEK bir okuma hatasıdır (veritabanı
+#: dosyası bozuk, indeks kilitli) ve uyarır.
+YAPILANDIRILMAMIS_KODLAR: dict[str, tuple[str, ...]] = {
+    "atlas": ("config_yok",),
+    "orkestra": ("config_yok",),
+    "harita": ("config_yok",),
+    "bagimlilik": ("config_yok", "okunamadi"),
+}
+
+DURUM_SOURCES = tuple(YAPILANDIRILMAMIS_KODLAR)
 
 
 def _truncate(value: Any) -> str:
@@ -192,8 +209,9 @@ def _durum_sentences(name: str, value: Any) -> list[str]:
     komut yolu ya da alt sürecin stderr'i zaten collector'da sabit kodlara
     indirgenmişti, buraya da sızmaz.
 
-    Tek koşul: orkestra `onay_bekleyen > 0` (`basarisiz`, atlas `veri_bayat`
-    ve harita `indeks_bayat` uyarı ÜRETMEZ; gerekçe modül başındaki not).
+    Tek koşul: orkestra `onay_bekleyen > 0` (`basarisiz`, atlas `veri_bayat`,
+    harita `indeks_bayat` ve `bagimlilik`ın dört sayacı uyarı ÜRETMEZ;
+    gerekçe modül başındaki not).
 
     `null` alanlar SAYILMAZ: bilinmeyen bir sayı "sıfır" da "sorun var" da
     demek değildir.
@@ -213,16 +231,20 @@ def _durum_sentences(name: str, value: Any) -> list[str]:
     return sentences
 
 
-def _yapilandirilmamis(value: Any) -> bool:
-    """Opsiyonel durum kaynağı hiç yapılandırılmamış mı (`config_yok`)?
+def _yapilandirilmamis(name: str, value: Any) -> bool:
+    """Opsiyonel durum kaynağı "hiç izlenmiyor" durumunda mı?
 
     Böyle bir kaynak "erişilemiyor" değil "izlenmiyor"dur; Telegram'a
     her cron çalışmasında "atlas erişilemiyor (config_yok)" gitmemeli.
+    Hangi kodun "izlenmiyor" sayıldığı KAYNAĞA BAĞLIDIR
+    (`YAPILANDIRILMAMIS_KODLAR`) — `bagimlilik` raporu dosyadan okuduğu
+    için dosya yoksa da henüz taranmamış sayılır, atlas'ın `okunamadi`
+    kodu ise gerçek bir arızadır.
     """
     return (
         isinstance(value, dict)
         and value.get("reachable") is False
-        and value.get("error") == "config_yok"
+        and value.get("error") in YAPILANDIRILMAMIS_KODLAR.get(name, ())
     )
 
 
@@ -274,7 +296,7 @@ def build_alert_message(summary: dict) -> str | None:
             # erişilememe cümlesi `_describe`'ın mevcut dalından gelir
             # (`reachable: False`); sayı alanlarındaki uyarılar ise
             # `_durum_sentences`'ten. İkisi birbirinin yerine geçmez.
-            if not _yapilandirilmamis(value):
+            if not _yapilandirilmamis(name, value):
                 sentence = _describe(name, value)
                 if sentence:
                     problems.append(sentence)

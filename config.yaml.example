@@ -48,6 +48,14 @@ orkestra:
 # yetim tanımı harita'yla aynıdır). `app/collectors/harita_status.py` duruyor;
 # yeniden açmak için `app/aggregator.py`'ye tek satır + panel kartı gerekir.
 
+# bagimlilik: pip/npm zafiyet taramasının rapor DOSYASI. Kule raporu
+# YENIDEN ÜRETMEZ, sadece okur ve sayıları doğrular — hiçbir ağ çağrısı yok.
+# Blok tamamen OPSİYONEL: eksikse/bozuksa kart "erişilemiyor" der ve
+# Telegram'a uyarı GİTMEZ (henüz hiç tarama yapılmamış olabilir).
+# ~ genişletilir. Dosya yoksa sabit kod: okunamadi. Bozuk/şema dışı: cikti_gecersiz.
+bagimlilik:
+  dosya: "~/.bagimlilik/son.json"
+
 araclar:                     # panel araçları (atlas/orkestra/harita) ayarları
   bosta_kapat_dakika: 15     # 0 = otomatik kapatma kapalı
 

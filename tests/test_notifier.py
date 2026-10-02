@@ -975,3 +975,111 @@ def test_durum_lines_dont_enter_source_quota():
     assert "orkestra onay bekleyen görev: 2" in lines
     assert not any("başarısız" in satir for satir in lines)
     assert not any("bayat" in satir for satir in lines)
+
+
+# ---- bagimlilik: dosya tabanlı kaynak, kendi spam kurallarıyla ---------
+#
+# `bagimlilik` raporu bir DOSYADAN okur. Dosya yoksa `okunamadi` döner —
+# bu "araç hiç çalışmadı" demektir (atlas'ın `config_yok` muafiyetiyle aynı
+# davranış), her cron koşusunda mesaj üretmemelidir. Buna karşılık atlas/
+# orkestra/harita'da `okunamadi` GERÇEK bir arızadır ve uyarır: muafiyet
+# kaynağa bağlıdır, koda değil.
+
+GECERLI_BAGIMLILIK = {
+    "reachable": True,
+    "son_tarama": "2026-10-02T22:42:46+00:00",
+    "repo_sayisi": 12,
+    "acikli_repo": 3,
+    "kritik_yuksek": 7,
+    "toplam_acik": 41,
+    "denetlenemedi": 2,
+}
+
+
+@pytest.mark.parametrize(
+    "hata_kodu",
+    ["config_yok", "okunamadi"],
+)
+def test_bagimlilik_henuz_taranmamis_uyari_uretmez(hata_kodu):
+    """Rapor dosyası yok (araç hiç çalışmadı) ya da blok hiç yazılmamış:
+    kaynak "izlenmiyor" — Telegram'a mesaj GİTMEZ, her cron'da spam olurdu."""
+    summary = {"bagimlilik": {"reachable": False, "error": hata_kodu}, "collected_at": 1.0}
+
+    assert notifier.build_alert_message(summary) is None
+
+
+def test_bagimlilik_okunamadi_muafiyeti_kaynaga_baglidir():
+    """Aynı kod atlas'ta GERÇEK bir arıza: muafiyet kod değil KAYNAK
+    özelliğidir. Burada atlas `okunamadi` uyarırken bagimlilik susar."""
+    atlas_ozet = {"atlas": {"reachable": False, "error": "okunamadi"}, "collected_at": 1.0}
+    bag_ozet = {"bagimlilik": {"reachable": False, "error": "okunamadi"}, "collected_at": 1.0}
+
+    assert notifier.build_alert_message(atlas_ozet) is not None
+    assert notifier.build_alert_message(bag_ozet) is None
+
+
+def test_bagimlilik_sayaclar_telegrama_gitmez():
+    """`acikli_repo`/`kritik_yuksek`/`toplam_acik`/`denetlenemedi` sürekli
+    >0 olabilen inceleme bulgularıdır: panelde görünür, uyarı ÜRETMEZ."""
+    summary = {"bagimlilik": GECERLI_BAGIMLILIK, "collected_at": 1.0}
+
+    assert notifier.build_alert_message(summary) is None
+
+
+@pytest.mark.parametrize(
+    "sayi",
+    [
+        {"acikli_repo": 12},
+        {"kritik_yuksek": 9999},
+        {"denetlenemedi": 7},
+        {"acikli_repo": 0, "kritik_yuksek": 0, "denetlenemedi": 0},
+    ],
+)
+def test_bagimlilik_hicbir_sayac_tek_basina_uyari_uretmez(sayi):
+    summary = {
+        "bagimlilik": dict(GECERLI_BAGIMLILIK, **sayi),
+        "collected_at": 1.0,
+    }
+
+    assert notifier.build_alert_message(summary) is None
+
+
+@pytest.mark.parametrize(
+    "hata_kodu",
+    ["cikti_gecersiz", "bilinmeyen_hata", "calistirilamadi"],
+)
+def test_bagimlilik_gecersiz_cikti_uyarir(hata_kodu):
+    """Rapor var ama bozuk/şema dışı: bu gerçek bir arızadır, susulmaz —
+    kullanıcı raporun bozuk olduğunu bilmeli."""
+    summary = {"bagimlilik": {"reachable": False, "error": hata_kodu}, "collected_at": 1.0}
+
+    message = notifier.build_alert_message(summary)
+
+    assert message is not None
+    assert "bagimlilik erişilemiyor" in message
+    assert hata_kodu in message
+
+
+def test_bagimlilik_sayilari_baska_kaynagin_uyarisinda_girmez():
+    """Başka bir kaynak uyarı üretse bile bagimlilik'ın sayıları ve adı
+    mesaja karışmaz (atlas/orkestra testlerinin aynı kuralı)."""
+    message = notifier.build_alert_message(
+        {
+            "bagimlilik": GECERLI_BAGIMLILIK,
+            "orkestra": dict(GECERLI_ORKESTRA, onay_bekleyen=1),
+            "collected_at": 1_700_000_000.0,
+        }
+    )
+
+    assert message is not None
+    assert "orkestra onay bekleyen görev: 1" in message
+    assert "bagimlilik" not in message
+    assert "41" not in message
+    assert "12" not in message
+
+
+def test_bagimlilik_reachable_anahtari_yoksa_uyari_uretmez():
+    """Sözleşme başarıda `reachable: True` döner; eksikse belirsizliktir."""
+    summary = {"bagimlilik": {"acikli_repo": 3}, "collected_at": 1.0}
+
+    assert notifier.build_alert_message(summary) is None

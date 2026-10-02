@@ -9,12 +9,12 @@ Türkçe · [English](README.en.md)
 Umut'un projelerinin durumunu tek panelde toplayan kontrol kulesi. Git
 repolarının durumu, cor (claude-openrouter) proxy sağlığı, BorsaSite
 pipeline'ının son çalışması, readbunny veritabanı durumu, Mt3Ui55OS
-vault'unun hijyeni, atlas/orkestra'nın durum sayıları ve otomatik
-bakım uyarıları (dolu disk, unutulmuş süreçler, eski commitlenmemiş
-değişiklik) — hepsi tek bir koyu temalı web panelinde, 30 saniyede bir
-kendini tazeleyen tek sayfada.
+vault'unun hijyeni, atlas/orkestra'nın durum sayıları, bağımlılık
+taramasının açık bulgu sayıları ve otomatik bakım uyarıları (dolu disk,
+unutulmuş süreçler, eski commitlenmemiş değişiklik) — hepsi tek bir koyu
+temalı web panelinde, 30 saniyede bir kendini tazeleyen tek sayfada.
 
-Offline-first değil: kule kendi başına veri üretmez, dokuz farklı
+Offline-first değil: kule kendi başına veri üretmez, on farklı
 kaynağa (dosya sistemi, HTTP, Postgres, alt süreç) bağlanıp onları okur.
 Bir kaynağa ulaşılamazsa panel çökmez — o kaynağın kartı "erişilemiyor"
 gösterir, diğerleri etkilenmez.
@@ -55,7 +55,7 @@ başlamamak yerine bu yolu seçiyor).
 kule --notify-once
 ```
 
-Sunucuyu **başlatmaz**; dokuz kaynağı bir kez okur, herhangi biri
+Sunucuyu **başlatmaz**; on kaynağı bir kez okur, herhangi biri
 erişilemiyorsa ya da hata veriyorsa, ya da otomatik bakım bir şey
 bulduysa uyarıyı Telegram'a gönderir ve stdout'a basar. Sorun yoksa
 `kule: her şey yolunda` basar ve hiç mesaj göndermez. Her durumda exit
@@ -107,6 +107,9 @@ orkestra:
   komut: ["orkestra"]
   zaman_asimi: 15
 
+bagimlilik:                      # OPSİYONEL — rapor dosyasının yolu
+  dosya: "~/.bagimlilik/son.json"   # kule raporu okur, yeniden üretmez
+
 telegram:
   bot_token: ""   # `kule --notify-once` bununla uyarı gönderir
   chat_id: ""     # env'den de okunabilir: KULE_TELEGRAM_BOT_TOKEN / KULE_TELEGRAM_CHAT_ID
@@ -122,7 +125,7 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
   çeker, gelen JSON ile DOM'u doldurur. Bir istek başarısız olursa
   ekranda son bilinen veri kalır, sadece sessiz bir "bağlantı koptu"
   rozeti görünür.
-- **`GET /api/summary`** — dokuz kaynağın JSON özeti:
+- **`GET /api/summary`** — on kaynağın JSON özeti:
 
   ```json
   {
@@ -147,6 +150,11 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
       "gorev_durum": {"onay-bekliyor": 1, "tamamlandi": 13},
       "kota": {"gun": "2026-09-30", "toplam_istek": 87, "uyari_sayisi": 1, "veri_var": true}
     },
+    "bagimlilik": {
+      "reachable": true, "son_tarama": "2026-10-02T22:57:55+00:00",
+      "repo_sayisi": 39, "acikli_repo": 5,
+      "kritik_yuksek": 81, "toplam_acik": 133, "denetlenemedi": 33
+    },
     "collected_at": 1234567890.0
   }
   ```
@@ -161,6 +169,9 @@ değişkeni yaml'daki değerin önüne geçer, secret repo'ya hiç girmez.
   "bilinmiyor" yazar, 0 göstermez. Bir sayı alanı int değilse ya da
   çıktı sözleşmeye uymuyorsa (`surum != 1`, yanlış `kaynak`, JSON değil)
   tüm kaynak `{"reachable": false, "error": "cikti_gecersiz"}` olur.
+
+  `bagimlilik` de aynı erişilemezlik şeklini kullanır: dosya yoksa
+  `okunamadi`, bozuk/şema dışı içerikte `cikti_gecersiz`.
 
 `kule --notify-once` bu özeti okuyup sorunlu kaynakları kısa bir Türkçe
 uyarı metnine çevirir (`app/notifier.py::build_alert_message`): `cor`
@@ -234,10 +245,15 @@ olmasın diye, yalnızca gerçek arıza/uyumsuzluk:
 |---|---|---|
 | atlas | (yalnızca erişilememe) | `veri_bayat` (sarı), `bayat_readme`, `push_bekleyen` |
 | orkestra | `onay_bekleyen > 0` | `basarisiz` (birikir, iptal edilene dek düşmez), `kanitsiz_ya_da_supheli`, `kota.uyari_sayisi` |
+| bagimlilik | (yalnızca erişilememe) | `acikli_repo`, `kritik_yuksek`, `toplam_acik`, `denetlenemedi` |
 
 Sağ sütundakiler sürekli `> 0` olan inceleme sayaçlarıdır; her koşuda
-basılmaları bildirimi değersiz kılardı. İki kaynağın **erişilememesi**
-uyarıdır; yapılandırılmamış (`config_yok`) kaynak "izlenmiyor" sayılır, uyarmaz.
+basılmaları bildirimi değersiz kılardı. **Erişilememe** uyarıdır;
+yapılandırılmamış (`config_yok`) kaynak "izlenmiyor" sayılır, uyarmaz.
+`bagimlilik` bunun bir istisnası: raporu bir dosyadan okuduğu için dosya
+yoksa da henüz taranmamış demektir (`okunamadi`) ve susar — her cron
+koşusunda "bagimlilik erişilemiyor" göndermemek için. Aynı kod atlas'ta
+ise gerçek bir arızdır ve uyarır.
 `veri_bayat` bilerek Telegram'a gitmez: atlas taraması elle yenilenir,
 bayatlık uzun süre kalıcı olabilir ve her cron çalışmasında mesaj üretirdi.
 

@@ -314,10 +314,18 @@ DURUM_DOM_IDS = [
     "orkestra-onay-bekleyen",
     "orkestra-basarisiz",
     "orkestra-kanitsiz",
-
+    # bagimlilik: dosya tabanlı kaynak, aynı kart kalıbı
+    "bagimlilik-badge",
+    "bagimlilik-error",
+    "bagimlilik-repo-sayisi",
+    "bagimlilik-acikli-repo",
+    "bagimlilik-kritik-yuksek",
+    "bagimlilik-toplam-acik",
+    "bagimlilik-denetlenemedi",
+    "bagimlilik-son-tarama",
 ]
 
-DURUM_STAT_TILE_PREFIXES = ["stat-atlas", "stat-orkestra"]
+DURUM_STAT_TILE_PREFIXES = ["stat-atlas", "stat-orkestra", "stat-bagimlilik"]
 
 
 @pytest.mark.parametrize("dom_id", DURUM_DOM_IDS)
@@ -346,6 +354,7 @@ def test_durum_cards_are_called_from_render_entrypoint():
     for cagri in (
         "renderAtlas(data.atlas);",
         "renderOrkestra(data.orkestra);",
+        "renderBagimlilik(data.bagimlilik);",
     ):
         assert cagri in render_body, f"{cagri} render() gövdesinde yok"
 
@@ -369,23 +378,24 @@ def test_durum_cards_are_present_alongside_existing_cards(dashboard_html):
     # yeni kart etiketleri
     assert ">atlas<" in dashboard_html.replace(" ", "")
     assert ">orkestra<" in dashboard_html.replace(" ", "")
+    assert ">bağımlılık<" in dashboard_html.replace(" ", "")
 
 
 def test_durum_json_shape_is_documented_in_page_docstring():
     """page.py docstring'i `/api/summary` şeklini belgeliyor; yeni alanlar
     da orada geçmeli, kaldırılan harita geçmemeli."""
-    for anahtar in ('"atlas"', '"orkestra"'):
+    for anahtar in ('"atlas"', '"orkestra"', '"bagimlilik"'):
         assert anahtar in page_module.__doc__
     assert '"harita"' not in page_module.__doc__
 
 
 def test_durum_stat_tiles_fit_the_grid(dashboard_html):
-    """Sekiz kutu üç kolonlu ızgarada 3+3+2 olur — CSS'te altı kutunun
+    """Dokuz kutu üç kolonlu ızgarada 3+3+3 olur — CSS'te altı kutunun
     ızgarası kalmamalı, `.card-wide` yeni geniş kartlar için de var."""
     assert "repeat(3, 1fr)" in styles_module.DASHBOARD_CSS
     assert ".card-wide" in styles_module.DASHBOARD_CSS
-    # sekiz stat-tile gerçekten var mı
-    assert dashboard_html.count('class="stat-tile"') == 8
+    # dokuz stat-tile gerçekten var mı
+    assert dashboard_html.count('class="stat-tile"') == 9
 
 
 def test_unknown_counts_render_as_bilinmiyor_not_zero():

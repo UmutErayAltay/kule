@@ -9,11 +9,11 @@ yapmak" için gereken özet bilgidir.
 kule: Umut'un projelerinin durumunu tek panelde toplayan kontrol
 kulesi. Git repo durumları, cor (claude-openrouter) proxy sağlığı,
 BorsaSite pipeline'ı, readbunny DB'si, Mt3Ui55OS vault hijyeni,
-atlas/orkestra durum sayıları ve otomatik bakım uyarılarını tek
-bir FastAPI panelinde birleştirir. kule kendi başına veri üretmez —
-sekiz ayrı dış kaynağa (dosya sistemi/HTTP/Postgres/süreç listesi/alt
-süreç) bağlanıp okur, biri çökerse yalnızca o kartı "erişilemiyor"
-gösterir.
+atlas/orkestra durum sayıları, bağımlılık tarama özeti ve otomatik
+bakım uyarılarını tek bir FastAPI panelinde birleştirir. kule kendi
+başına veri üretmez — dokuz ayrı dış kaynağa (dosya sistemi/HTTP/
+Postgres/süreç listesi/alt süreç) bağlanıp okur, biri çökerse yalnızca
+o kartı "erişilemiyor" gösterir.
 
 ## Komutlar
 
@@ -37,7 +37,7 @@ Testler `tests/` altında, `python -m pytest` ile çalışır (dev bağımlılı
 ```
 app/
   config.py           # config.yaml yükleyici — yoksa ConfigError, example'a SESSİZCE düşmez
-  aggregator.py        # 9 collector'ı paralel çağırır, her biri izole, 60sn TTL cache
+  aggregator.py        # 10 collector'ı paralel çağırır, her biri izole, 60sn TTL cache
   notifier.py         # özet -> kısa Türkçe uyarı metni + Telegram Bot API'ye gönderim
   cli.py              # `kule` komutu: sunucuyu başlatır veya --notify-once ile tek seferlik bildirim
   collectors/
@@ -51,6 +51,7 @@ app/
     atlas_status.py     # `atlas durum --json` -> pushlanmamış/README/bulgu/todo sayıları (kirli repo/repo sayısı OKUNMAZ: canlı `git` kartıyla örtüşürdü)
     orkestra_status.py  # `orkestra durum --json` -> görev/onay/kota sayıları
     harita_status.py    # `harita durum --json` — modül duruyor ama aggregator'a KAYITLI DEĞİL (panelde kartı yok, vault kartı yeterli)
+    bagimlilik_status.py # `~/.bagimlilik/son.json` RAPOR DOSYASI (alt süreç DEĞİL) -> açık repo / kritik+yüksek / denetlenemedi
   main.py              # FastAPI app — GET / (panel HTML), GET /api/summary (aggregator JSON)
   web/
     page.py             # render_dashboard_html() — statik HTML iskelet (veri içermez)
@@ -60,7 +61,7 @@ config.yaml.example    # şablon, secret alanları boş
 config.yaml            # gerçek değerler — .gitignore'da, ASLA commit edilmez
 ```
 
-Akış: `config.yaml` (`app/config.py::load_config`) → dokuz collector
+Akış: `config.yaml` (`app/config.py::load_config`) → on collector
 (`app/collectors/*.py::collect(config)`) → `app/aggregator.py::
 collect_all` (paralel + izolasyon) / `get_cached_summary` (60sn TTL) →
 `app/main.py` (`GET /api/summary` bu JSON'u döner, `GET /` panel
@@ -123,6 +124,13 @@ istekte 500 + "ne yapman gerektiğini" söyleyen bir mesaj döner.
    Yeni collector farklı bir şekil döndürüyorsa ya `_describe`'a dal
    ekle ya da `build_alert_message`'de kendi yolunu yaz, yoksa o kaynağın
    hataları bildirimde hiç görünmez.
+   **`DURUM_SOURCES` = `YAPILANDIRILMAMIS_KODLAR` anahtarlarıdır**: yeni bir
+   `dict` + `reachable` kaynağı eklediğinde `notifier.py`'deki eşlemeye de
+   bir satır düşmezsen `config_yok` muafiyetini almaz ve her cron çalışmasında
+   "erişilemiyor (config_yok)" mesajı üretir. Muafiyet **koda değil kaynağa**
+   bağlıdır: `bagimlilik` raporu dosyadan okuduğu için `okunamadi` de
+   muaftır (araç hiç çalışmamış demektir), atlas'taki `okunamadi` ise
+   gerçek arızadır ve uyarır.
 
 ## Kritik kurallar (bunları asla bozma)
 
@@ -176,6 +184,11 @@ istekte 500 + "ne yapman gerektiğini" söyleyen bir mesaj döner.
   `str(e)` ya da `proc.stderr`'ı mesaja koyarsa bu madde ihlal edilmiş
   demektir (`test_no_secret_leak*` testleri bunu kazara değil, bilerek
   güvenceye alır).
+- **Dosyadan okunan kaynakta da ham metin dışarı çıkmaz** (`bagimlilik`):
+  raporun JSON metni, repo yolları, paket adları ve `str(e)` ASLA panele
+  ya da Telegram'a girmez — kule yalnızca doğrulanmış SAYILARI okur,
+  gerisini (`aciklar`, `ayrinti`, `desteklenmeyen`, `yol`, `ad`) bilerek yok
+  sayar. Tek yol `config["bagimlilik"]["dosya"]`'dandır (hardcode yol yok).
 - **`bool` bir sayı DEĞİLDİR**: `int`'in alt türü olduğu için
   `isinstance(True, int)` doğrudur; `{"repo_sayisi": true}` geçerli JSON'dur
   ama "1 repo" demek değildir. Doğrulama `is_count()`'ten geçer.

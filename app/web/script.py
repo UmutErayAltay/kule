@@ -4,7 +4,7 @@ Sayfa yüklenince ve her 30 saniyede bir `/api/summary`'yi çeker; şekli
 `app/aggregator.py::collect_all`'ın döndürdüğü dict ile birebir aynı
 varsayılır: {git: [...], cor: {...}, borsasite: {...}, readbunny: {...},
 vault: {...}, maintenance: {...}, atlas: {...}, orkestra: {...},
-collected_at: <epoch saniye>}. Her
+bagimlilik: {...}, collected_at: <epoch saniye>}. Her
 collector kendi `{"error": ...}` ile izole düştüğü için burada da her
 okuma "alan yoksa/obje değilse boş göster" ilkesiyle savunmalı yazılıyor
 — backend'in tam şeklini bilmeden (henüz ayrı bir ajan yazıyor) kırılgan
@@ -250,6 +250,27 @@ DASHBOARD_JS = """
         count(ork.gorev_toplam) + " görev" + (ork.basarisiz != null ? " · " + count(ork.basarisiz) + " başarısız" : "")
       );
     }
+
+    // bagimlilik: rapor dosyasından gelen sayılar. Sürekli >0 olan bir
+    // sayaçtır (bir repoda bilinçli olarak eski bir paket bırakılabilir),
+    // o yüzden Telegram'a gitmez; burada yalnızca görünür. Rapor hiç
+    // üretilmemişse "erişilemiyor" görünür ve sabit hata kodu yazılır.
+    var bag = isPlainObject(data.bagimlilik) ? data.bagimlilik : {};
+    if (bag.reachable !== true) {
+      setStatTile("stat-bagimlilik", "ULAŞILAMIYOR", "bad", bag.error ? String(bag.error).slice(0, 48) : "");
+    } else {
+      // `denetlenemedi` kutusu sarı yapar: tarama yapılamayan bir yer
+      // vardır, yani "temiz" görünen sayılar eksik olabilir.
+      var kutuSarı = typeof bag.denetlenemedi === "number" && bag.denetlenemedi > 0;
+      setStatTile(
+        "stat-bagimlilik",
+        count(bag.acikli_repo),
+        kutuSarı ? "warn" : "ok",
+        count(bag.kritik_yuksek) + " kritik+yüksek · "
+          + count(bag.denetlenemedi) + " denetlenemedi · "
+          + (fmtRelative(bag.son_tarama) || UNKNOWN)
+      );
+    }
   }
 
   function renderRepoTable(git) {
@@ -385,6 +406,19 @@ DASHBOARD_JS = """
     setCountText("orkestra-kanitsiz", orkestra.kanitsiz_ya_da_supheli);
     renderKv(qs("orkestra-gorev-durum-kv"), orkestra.gorev_durum);
     renderKv(qs("orkestra-kota-kv"), orkestra.kota);
+  }
+
+  function renderBagimlilik(bag) {
+    bag = isPlainObject(bag) ? bag : {};
+    var reachable = bag.reachable === true;
+    setBadge(qs("bagimlilik-badge"), reachable ? "ok" : "bad", reachable ? "okundu" : "erişilemiyor");
+    setText("bagimlilik-error", bag.error ? String(bag.error) : "");
+    setCountText("bagimlilik-repo-sayisi", bag.repo_sayisi);
+    setCountText("bagimlilik-acikli-repo", bag.acikli_repo);
+    setCountText("bagimlilik-kritik-yuksek", bag.kritik_yuksek);
+    setCountText("bagimlilik-toplam-acik", bag.toplam_acik);
+    setCountText("bagimlilik-denetlenemedi", bag.denetlenemedi);
+    setText("bagimlilik-son-tarama", bag.son_tarama ? fmtDate(bag.son_tarama) : UNKNOWN);
   }
 
   function renderCor(cor) {
@@ -614,6 +648,7 @@ DASHBOARD_JS = """
     renderVault(data.vault);
     renderAtlas(data.atlas);
     renderOrkestra(data.orkestra);
+    renderBagimlilik(data.bagimlilik);
     renderMaintenance(data.maintenance);
     renderOverallStatus(data);
     var updatedEl = qs("updated-at");
