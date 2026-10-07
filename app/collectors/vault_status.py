@@ -24,6 +24,9 @@ from pathlib import Path
 
 STATUS_LINE = re.compile(r"\*\*Status:\*\*\s*([^\s]+)")
 CLOSED_MARKERS = {"✅"}
+# Güncel Threads.md biçimi: `### Thread: ...` başlıkları, `## Closed` altındakiler kapalı.
+THREAD_HEADING = re.compile(r"^### Thread:", re.MULTILINE)
+CLOSED_SECTION = re.compile(r"^## Closed", re.MULTILINE)
 
 # Sayıma girmeyen klasörler (vault köküne göreli; çok bileşenli kural tam
 # diziyi, tek bileşenli kural ağacın her derinliğini eşler). harita'nın
@@ -131,6 +134,11 @@ def _count_open_threads(threads_md: Path) -> tuple[int, int]:
         return 0, 0
     text = threads_md.read_text(encoding="utf-8", errors="replace")
     statuses = STATUS_LINE.findall(text)
+    if not statuses:
+        closed_at = CLOSED_SECTION.search(text)
+        head = text[: closed_at.start()] if closed_at else text
+        open_count = len(THREAD_HEADING.findall(head))
+        return open_count, open_count + len(THREAD_HEADING.findall(text[len(head) :]))
     open_count = sum(1 for s in statuses if s not in CLOSED_MARKERS)
     return open_count, len(statuses)
 

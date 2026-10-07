@@ -219,6 +219,28 @@ def test_collect_open_and_closed_threads(tmp_path):
     assert result["open_threads"] == 2  # sadece ✅ kapali sayilir
 
 
+def test_collect_heading_format_threads(tmp_path):
+    vault = tmp_path / "vault"
+    companion = vault / "🔮 850-Companion"
+    companion.mkdir(parents=True)
+    (companion / "Threads.md").write_text(
+        "\n".join(
+            [
+                "## Active Threads",
+                "### Thread: a (açık)",
+                "### Thread: b",
+                "## Closed",
+                "### Thread: c",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = vault_status.collect({"vault": {"path": str(vault)}})
+
+    assert (result["open_threads"], result["total_threads"]) == (2, 3)
+
+
 def test_collect_missing_threads_file_returns_zero_threads(tmp_path):
     vault = tmp_path / "vault"
     vault.mkdir()

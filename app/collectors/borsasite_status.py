@@ -19,7 +19,7 @@ def _fetch_last_run_signals(database_url: str) -> dict:
     try:
         import psycopg
 
-        with psycopg.connect(database_url, connect_timeout=5) as conn:
+        with psycopg.connect(database_url, connect_timeout=2) as conn:
             with conn.cursor() as cur:
                 try:
                     cur.execute("SELECT MAX(created_at) FROM trade_decisions")

@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.config import ConfigError, load_config
 from app.aggregator import get_cached_summary
@@ -131,6 +131,11 @@ def _tool_action(ad: str, action: Callable[[], tuple[dict | None, str | None]]):
     if hata is not None:
         return JSONResponse(status_code=400, content={"error": hata})
     return JSONResponse(content=durum)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/api/tools")

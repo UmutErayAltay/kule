@@ -659,7 +659,7 @@ def test_touch_kendi_baslattigi_arac_kaydi_gunceller(config, canli_surecler, mon
     once = launcher._son_dokunus.get("atlas")
     assert once is not None
 
-    time.sleep(0.01)
+    time.sleep(0.05)
     launcher.touch("atlas")
     sonra = launcher._son_dokunus.get("atlas")
     assert sonra > once

@@ -74,4 +74,10 @@ def collect(config: dict) -> list[dict]:
             repos.extend(find_git_repos(root))
         except Exception:
             continue  # bu kök okunamadı, diğer köklerle devam
-    return [repo_summary(r) for r in repos]
+    summaries = [repo_summary(r) for r in repos]
+    # Aynı adlı iki klon (ör. Desktop + Documents) tabloda ayırt edilsin.
+    adlar = [x["name"] for x in summaries]
+    for x in summaries:
+        if adlar.count(x["name"]) > 1:
+            x["name"] = f"{Path(x['path']).parent.name}/{x['name']}"
+    return summaries

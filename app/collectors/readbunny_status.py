@@ -13,7 +13,7 @@ def collect(config: dict) -> dict:
     try:
         import psycopg
 
-        with psycopg.connect(database_url, connect_timeout=5) as conn:
+        with psycopg.connect(database_url, connect_timeout=2) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT MAX(updated_at), "
