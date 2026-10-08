@@ -684,7 +684,7 @@ DASHBOARD_JS = """
       });
   }
 
-  // ---- araç yönetimi (atlas / orkestra / harita) -----------
+  // ---- araç yönetimi (atlas / orkestra / harita / liman) -----------
   //
   // `/api/tools` süreç durumunu verir; araçlar kartı salt durum gösterir,
   // başlat/durdur sekme akışından yürür (aşağıda). Hata mesajları sabit
@@ -724,7 +724,7 @@ DASHBOARD_JS = """
   // görünürken 30 sn'de bir `touch` gider, kule de kullanılmayan aracı
   // kendisi kapatır.
 
-  var TOOLS = ["atlas", "orkestra", "harita"];
+  var TOOLS = ["atlas", "orkestra", "harita", "liman"];
   var TOUCH_MS = 30000;
   var READY_POLL_MS = 700;
   var READY_MAX_TRIES = 60;

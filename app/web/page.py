@@ -92,6 +92,7 @@ _HTML_MID = """</style>
   <button class="tab" id="tab-atlas" data-tab="atlas" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-atlas"></span>atlas</button>
   <button class="tab" id="tab-orkestra" data-tab="orkestra" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-orkestra"></span>orkestra</button>
   <button class="tab" id="tab-harita" data-tab="harita" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-harita"></span>harita</button>
+  <button class="tab" id="tab-liman" data-tab="liman" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-liman"></span>liman</button>
 </nav>
 
 <div class="tab-panel" id="panel-kule" role="tabpanel">
@@ -363,6 +364,18 @@ _HTML_MID = """</style>
       </dl>
     </div>
 
+    <div class="card tool-card">
+      <div class="card-head">
+        <span class="badge badge-neutral" id="tool-badge-liman">bekliyor</span>
+        <span class="tool-name">liman</span>
+      </div>
+      <dl class="kv-list">
+        <dt>port</dt><dd id="tool-port-liman">—</dd>
+        <dt>pid</dt><dd id="tool-pid-liman">—</dd>
+        <dt>veri</dt><dd id="tool-hazir-liman">—</dd>
+      </dl>
+    </div>
+
   </div>
   <div class="stat-sub num-bad" id="tools-error"></div>
 </section>
@@ -406,6 +419,19 @@ _HTML_MID = """</style>
   </div>
   <div class="tool-notice" id="tool-notice-harita" hidden></div>
   <div class="tool-frame-host" id="tool-frame-harita"></div>
+</section>
+
+<section class="tab-panel tool-panel" id="panel-liman" role="tabpanel" hidden>
+  <div class="tool-bar">
+    <span class="tool-state" id="tool-state-liman">kapalı</span>
+    <span class="tool-bar-actions">
+      <button class="btn" id="tool-open-liman" type="button" hidden>Yeni sekmede aç</button>
+      <button class="btn" id="tool-restart-liman" type="button">Yeniden başlat</button>
+      <button class="btn btn-danger" id="tool-stop-liman" type="button">Şimdi kapat</button>
+    </span>
+  </div>
+  <div class="tool-notice" id="tool-notice-liman" hidden></div>
+  <div class="tool-frame-host" id="tool-frame-liman"></div>
 </section>
 
 </main>
