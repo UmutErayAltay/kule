@@ -1,6 +1,6 @@
 """Kule'nin yönettiği panel araçları: süreç başlat / durdur / durum.
 
-atlas (8770), orkestra (8780), harita (8900) ve liman (8795) ayrı araç/ikinci panel DEĞİL,
+atlas (8770), orkestra (8780), harita (8900), liman (8795), devtemizle (8796) ve yol (8797) ayrı araç/ikinci panel DEĞİL,
 kule'nin içinden yönetilen yardımcı panellerdir: kule her zaman açık, bu
 üçü "istediğini aç/kapat". Her biri kendi panelini `web` alt komutuyla
 127.0.0.1'de bir portta servis eder; kule o porta HTTP isteği atarak
@@ -81,7 +81,7 @@ _FRAME_ORIGIN_RE = re.compile(r"^http://(127\.0\.0\.1|localhost):[0-9]{1,5}$")
 
 # ---------------------------------------------------------------- hatalar
 # SABİT cümleler. Alt sürecin ham metni ASLA buraya girmez.
-ERR_AD_YOK = "araç bulunamadı — geçerli adlar: atlas, orkestra, harita, liman"
+ERR_AD_YOK = "araç bulunamadı — geçerli adlar: atlas, orkestra, harita, liman, devtemizle, yol"
 ERR_EXE_YOK = "bulunamadı: kurulu değil ya da PATH'te değil"
 ERR_BASLATILAMADI = "başlatılamadı"
 ERR_DURDURULAMADI = "durdurulamadı"
@@ -95,6 +95,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "orkestra": {"port": 8780, "args": ["web", "--port", "8780"]},
     "harita": {"port": 8900, "args": ["web", "{vault}", "--port", "8900"]},
     "liman": {"port": 8795, "args": ["web", "--port", "8795"]},
+    "devtemizle": {"port": 8796, "args": ["web", "--port", "8796"]},
+    "yol": {"port": 8797, "args": ["web", "--port", "8797"]},
 }
 
 # Windows'ta alt süreç kule'nin konsolundan koparılır; POSIX'te bu

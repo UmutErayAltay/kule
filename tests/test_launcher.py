@@ -29,7 +29,7 @@ araclar_gerekli = pytest.mark.skipif(
     reason="atlas/orkestra/harita kurulu değil",
 )
 
-TOOL_ADLARI = ["atlas", "orkestra", "harita", "liman"]
+TOOL_ADLARI = ["atlas", "orkestra", "harita", "liman", "devtemizle", "yol"]
 
 
 # ------------------------------------------------------------- fixtürler
@@ -156,11 +156,13 @@ def test_tool_command_kullanilan_config_exe_yolunu_verir(config):
 
 
 def test_tool_command_portlar_gorev_karariyla_sabit():
-    # Portlar config'ten GELMEZ: görev kararı sabit (8770/8780/8900/8795).
+    # Portlar config'ten GELMEZ: görev kararı sabit (8770/8780/8900/8795/8796/8797).
     assert launcher.TOOLS["atlas"]["port"] == 8770
     assert launcher.TOOLS["orkestra"]["port"] == 8780
     assert launcher.TOOLS["harita"]["port"] == 8900
     assert launcher.TOOLS["liman"]["port"] == 8795
+    assert launcher.TOOLS["devtemizle"]["port"] == 8796
+    assert launcher.TOOLS["yol"]["port"] == 8797
 
 
 @araclar_gerekli
@@ -210,7 +212,7 @@ def test_list_status_uc_araci_eksiksiz_doner(config):
 @araclar_gerekli
 def test_status_alanlari_dogru_konumda(config):
     for arac in launcher.list_status(config):
-        assert arac["port"] in (8770, 8780, 8900, 8795)
+        assert arac["port"] in (8770, 8780, 8900, 8795, 8796, 8797)
         assert arac["url"] == f"http://127.0.0.1:{arac['port']}/"
         assert arac["exe"] is not None
         assert arac["komut"][0] == arac["exe"]

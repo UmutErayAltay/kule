@@ -93,6 +93,8 @@ _HTML_MID = """</style>
   <button class="tab" id="tab-orkestra" data-tab="orkestra" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-orkestra"></span>orkestra</button>
   <button class="tab" id="tab-harita" data-tab="harita" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-harita"></span>harita</button>
   <button class="tab" id="tab-liman" data-tab="liman" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-liman"></span>liman</button>
+  <button class="tab" id="tab-devtemizle" data-tab="devtemizle" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-devtemizle"></span>devtemizle</button>
+  <button class="tab" id="tab-yol" data-tab="yol" role="tab" type="button" aria-selected="false"><span class="tab-dot" id="tab-dot-yol"></span>yol</button>
 </nav>
 
 <div class="tab-panel" id="panel-kule" role="tabpanel">
@@ -376,6 +378,30 @@ _HTML_MID = """</style>
       </dl>
     </div>
 
+    <div class="card tool-card">
+      <div class="card-head">
+        <span class="badge badge-neutral" id="tool-badge-devtemizle">bekliyor</span>
+        <span class="tool-name">devtemizle</span>
+      </div>
+      <dl class="kv-list">
+        <dt>port</dt><dd id="tool-port-devtemizle">—</dd>
+        <dt>pid</dt><dd id="tool-pid-devtemizle">—</dd>
+        <dt>veri</dt><dd id="tool-hazir-devtemizle">—</dd>
+      </dl>
+    </div>
+
+    <div class="card tool-card">
+      <div class="card-head">
+        <span class="badge badge-neutral" id="tool-badge-yol">bekliyor</span>
+        <span class="tool-name">yol</span>
+      </div>
+      <dl class="kv-list">
+        <dt>port</dt><dd id="tool-port-yol">—</dd>
+        <dt>pid</dt><dd id="tool-pid-yol">—</dd>
+        <dt>veri</dt><dd id="tool-hazir-yol">—</dd>
+      </dl>
+    </div>
+
   </div>
   <div class="stat-sub num-bad" id="tools-error"></div>
 </section>
@@ -432,6 +458,32 @@ _HTML_MID = """</style>
   </div>
   <div class="tool-notice" id="tool-notice-liman" hidden></div>
   <div class="tool-frame-host" id="tool-frame-liman"></div>
+</section>
+
+<section class="tab-panel tool-panel" id="panel-devtemizle" role="tabpanel" hidden>
+  <div class="tool-bar">
+    <span class="tool-state" id="tool-state-devtemizle">kapalı</span>
+    <span class="tool-bar-actions">
+      <button class="btn" id="tool-open-devtemizle" type="button" hidden>Yeni sekmede aç</button>
+      <button class="btn" id="tool-restart-devtemizle" type="button">Yeniden başlat</button>
+      <button class="btn btn-danger" id="tool-stop-devtemizle" type="button">Şimdi kapat</button>
+    </span>
+  </div>
+  <div class="tool-notice" id="tool-notice-devtemizle" hidden></div>
+  <div class="tool-frame-host" id="tool-frame-devtemizle"></div>
+</section>
+
+<section class="tab-panel tool-panel" id="panel-yol" role="tabpanel" hidden>
+  <div class="tool-bar">
+    <span class="tool-state" id="tool-state-yol">kapalı</span>
+    <span class="tool-bar-actions">
+      <button class="btn" id="tool-open-yol" type="button" hidden>Yeni sekmede aç</button>
+      <button class="btn" id="tool-restart-yol" type="button">Yeniden başlat</button>
+      <button class="btn btn-danger" id="tool-stop-yol" type="button">Şimdi kapat</button>
+    </span>
+  </div>
+  <div class="tool-notice" id="tool-notice-yol" hidden></div>
+  <div class="tool-frame-host" id="tool-frame-yol"></div>
 </section>
 
 </main>
