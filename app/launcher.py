@@ -37,6 +37,7 @@ yönetir ve testlerden doğrudan çağrılabilir.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -50,6 +51,8 @@ import httpx
 import psutil
 
 from app.collectors import durum_status
+
+_log = logging.getLogger(__name__)
 
 #: Başlatılan panellerin pid'lerini tutan dosya.
 STATE_FILE = Path.home() / ".kule" / "launched.json"
@@ -287,7 +290,8 @@ def _http_status(port: int) -> int | None:
     """
     try:
         resp = httpx.get(f"http://127.0.0.1:{port}/", timeout=HEALTH_TIMEOUT)
-    except Exception:
+    except Exception as exc:
+        _log.warning("saglik kontrolu basarisiz: port=%s hata=%s", port, type(exc).__name__)
         return None
     return resp.status_code
 
